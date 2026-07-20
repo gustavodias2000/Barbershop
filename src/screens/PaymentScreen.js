@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert
+  Alert,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import PaymentService from '../services/PaymentService';
@@ -15,53 +15,10 @@ import { doc, updateDoc } from 'firebase/firestore';
 export default function PaymentScreen({ route, navigation }) {
   const { agendamento } = route.params;
   const { theme } = useTheme();
-  const [loading, setLoading] = useState(false);
   const styles = createStyles(theme);
 
   const preco = parseFloat(agendamento?.preco?.replace(',', '.') || '25.00');
   const precoEmCentavos = PaymentService.convertToCents(preco);
-
-  useEffect(() => {
-    // Inicializar Stripe quando a tela carrega
-    PaymentService.initialize().catch(console.error);
-  }, []);
-
-  const handlePayment = async () => {
-    setLoading(true);
-    
-    try {
-      const result = await PaymentService.processPayment(agendamento, precoEmCentavos);
-      
-      if (result.success) {
-        // Atualizar agendamento no Firestore
-        await updateDoc(doc(db, 'agendamentos', agendamento.id), {
-          status: 'pago',
-          paymentIntentId: result.paymentIntentId,
-          paidAt: new Date(),
-          paidAmount: result.amount
-        });
-
-        Alert.alert(
-          'Pagamento Realizado!',
-          `Pagamento de ${PaymentService.formatCurrency(precoEmCentavos)} realizado com sucesso!`,
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.goBack()
-            }
-          ]
-        );
-      } else if (result.canceled) {
-        console.log('Pagamento cancelado pelo usuário');
-      } else {
-        Alert.alert('Erro', result.error || 'Erro no processamento do pagamento');
-      }
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível processar o pagamento');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePresentialPayment = () => {
     Alert.alert(
@@ -134,29 +91,16 @@ export default function PaymentScreen({ route, navigation }) {
         <Text style={styles.optionsTitle}>Escolha a forma de pagamento:</Text>
         
         <TouchableOpacity
-          style={styles.paymentButton}
-          onPress={handlePayment}
-          disabled={loading}
-        >
-          <Text style={styles.paymentButtonIcon}>💳</Text>
-          <View style={styles.paymentButtonContent}>
-            <Text style={styles.paymentButtonTitle}>Pagar com Cartão/PIX</Text>
-            <Text style={styles.paymentButtonSubtitle}>
-              Cartão de crédito, débito ou PIX
-            </Text>
-          </View>
-          <Text style={styles.paymentButtonArrow}>→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={styles.presentialButton}
+          accessibilityRole="button"
+          accessibilityLabel="Confirmar agendamento com pagamento presencial"
           onPress={handlePresentialPayment}
         >
           <Text style={styles.presentialButtonIcon}>🏪</Text>
           <View style={styles.paymentButtonContent}>
-            <Text style={styles.presentialButtonTitle}>Pagar Presencialmente</Text>
+            <Text style={styles.presentialButtonTitle}>Confirmar Agendamento</Text>
             <Text style={styles.presentialButtonSubtitle}>
-              Dinheiro, cartão ou PIX no local
+              Pague no dia: dinheiro, cartão ou PIX
             </Text>
           </View>
           <Text style={styles.paymentButtonArrow}>→</Text>
@@ -164,10 +108,10 @@ export default function PaymentScreen({ route, navigation }) {
       </View>
 
       <View style={styles.securityInfo}>
-        <Text style={styles.securityTitle}>🔒 Pagamento Seguro</Text>
+        <Text style={styles.securityTitle}>🔒 Pagamento Presencial</Text>
         <Text style={styles.securityText}>
-          Seus dados estão protegidos com criptografia de ponta a ponta.
-          Processamento seguro via Stripe.
+          O pagamento é realizado diretamente com o barbeiro no dia do atendimento.
+          Formas aceitas: dinheiro, PIX ou cartão na maquininha.
         </Text>
       </View>
     </ScrollView>

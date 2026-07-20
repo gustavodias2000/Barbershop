@@ -11,19 +11,23 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { maskPhone, formatPhoneToE164 } from '../utils/dateUtils';
+import { useTheme } from '../context/ThemeContext';
 
 export default function RegisterScreen({ navigation }) {
+  const { theme } = useTheme();
+  const s = getStyles(theme);
+
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [telefone, setTelefone] = useState('');
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
-  const [tipo, setTipo] = useState('cliente'); // 'cliente' | 'barbeiro'
-  // Campos exclusivos do barbeiro (aparecem na vitrine para os clientes)
+  const [tipo, setTipo] = useState('cliente');
   const [especialidade, setEspecialidade] = useState('');
   const [preco, setPreco] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,7 +37,6 @@ export default function RegisterScreen({ navigation }) {
 
   const validateForm = () => {
     const newErrors = {};
-
     if (!nome.trim() || nome.trim().length < 3) {
       newErrors.nome = 'Nome deve ter pelo menos 3 caracteres';
     }
@@ -54,7 +57,6 @@ export default function RegisterScreen({ navigation }) {
     if (senha !== confirmarSenha) {
       newErrors.confirmarSenha = 'Senhas não conferem';
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -67,26 +69,22 @@ export default function RegisterScreen({ navigation }) {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email.trim(),
-        senha
+        senha,
       );
       const { uid } = userCredential.user;
 
       const telefoneE164 = formatPhoneToE164(telefone);
 
-      // Salvar dados do usuário (incluindo role) no Firestore
       await setDoc(doc(db, 'usuarios', uid), {
         uid,
         nome: nome.trim(),
         email: email.trim().toLowerCase(),
         telefone: telefoneE164,
-        tipo, // 'cliente' ou 'barbeiro'
+        tipo,
         createdAt: new Date(),
       });
 
-      // CORRIGIDO (item 3): se for barbeiro, cria também o documento na
-      // coleção `barbeiros` (a vitrine que os clientes veem para agendar).
-      // O ID do doc é o próprio uid, para que barbeiro.id === uid e o
-      // filtro de agendamentos por barbeiroId funcione corretamente.
+      // CORRIGIDO (item 3): barbeiro também aparece na vitrine para os clientes
       if (tipo === 'barbeiro') {
         await setDoc(doc(db, 'barbeiros', uid), {
           id: uid,
@@ -104,7 +102,6 @@ export default function RegisterScreen({ navigation }) {
     } catch (error) {
       console.error('Erro no cadastro:', error);
       let errorMessage = 'Erro ao criar conta. Tente novamente.';
-
       switch (error.code) {
         case 'auth/email-already-in-use':
           errorMessage = 'Este email já está cadastrado.';
@@ -121,7 +118,6 @@ export default function RegisterScreen({ navigation }) {
         default:
           errorMessage = 'Erro inesperado. Tente novamente.';
       }
-
       Alert.alert('Erro no Cadastro', errorMessage);
     } finally {
       setLoading(false);
@@ -133,187 +129,207 @@ export default function RegisterScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.title}>Barbershop</Text>
-          <Text style={styles.subtitle}>Criar nova conta</Text>
-        </View>
+    <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={s.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={s.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={s.header}>
+            <Text style={s.title}>Barbershop</Text>
+            <Text style={s.subtitle}>Criar nova conta</Text>
+          </View>
 
-        <View style={styles.form}>
-          {/* Tipo de conta */}
-          <Text style={styles.label}>Tipo de conta</Text>
-          <View style={styles.tipoContainer}>
-            <TouchableOpacity
-              style={[styles.tipoButton, tipo === 'cliente' && styles.tipoButtonActive]}
-              onPress={() => setTipo('cliente')}
-            >
-              <Text
-                style={[
-                  styles.tipoButtonText,
-                  tipo === 'cliente' && styles.tipoButtonTextActive,
-                ]}
+          <View style={s.form}>
+            {/* Tipo de conta */}
+            <Text style={s.label}>Tipo de conta</Text>
+            <View style={s.tipoContainer}>
+              <TouchableOpacity
+                style={[s.tipoButton, tipo === 'cliente' && s.tipoButtonActive]}
+                accessibilityRole="button"
+                accessibilityLabel="Cadastrar como cliente"
+                accessibilityState={{ selected: tipo === 'cliente' }}
+                onPress={() => setTipo('cliente')}
               >
-                ✂️ Cliente
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tipoButton, tipo === 'barbeiro' && styles.tipoButtonActive]}
-              onPress={() => setTipo('barbeiro')}
-            >
-              <Text
-                style={[
-                  styles.tipoButtonText,
-                  tipo === 'barbeiro' && styles.tipoButtonTextActive,
-                ]}
+                <Text
+                  style={[s.tipoButtonText, tipo === 'cliente' && s.tipoButtonTextActive]}
+                >
+                  ✂️ Cliente
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.tipoButton, tipo === 'barbeiro' && s.tipoButtonActive]}
+                accessibilityRole="button"
+                accessibilityLabel="Cadastrar como barbeiro"
+                accessibilityState={{ selected: tipo === 'barbeiro' }}
+                onPress={() => setTipo('barbeiro')}
               >
-                💈 Barbeiro
-              </Text>
-            </TouchableOpacity>
-          </View>
+                <Text
+                  style={[s.tipoButtonText, tipo === 'barbeiro' && s.tipoButtonTextActive]}
+                >
+                  💈 Barbeiro
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          {/* Campos exclusivos do barbeiro */}
-          {tipo === 'barbeiro' && (
-            <>
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>Especialidade</Text>
-                <TextInput
-                  value={especialidade}
-                  onChangeText={setEspecialidade}
-                  style={styles.input}
-                  placeholder="Ex: Corte, barba e sobrancelha"
-                  placeholderTextColor="#999"
-                  autoCapitalize="sentences"
-                />
-              </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>Preço do serviço (R$)</Text>
-                <TextInput
-                  value={preco}
-                  onChangeText={setPreco}
-                  style={styles.input}
-                  placeholder="Ex: 35,00"
-                  placeholderTextColor="#999"
-                  keyboardType="numeric"
-                />
-              </View>
-            </>
-          )}
-
-          {/* Nome */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Nome completo</Text>
-            <TextInput
-              value={nome}
-              onChangeText={(t) => { setNome(t); clearError('nome'); }}
-              style={[styles.input, errors.nome && styles.inputError]}
-              placeholder="Seu nome completo"
-              placeholderTextColor="#999"
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-            {errors.nome ? <Text style={styles.errorText}>{errors.nome}</Text> : null}
-          </View>
-
-          {/* Email */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              value={email}
-              onChangeText={(t) => { setEmail(t); clearError('email'); }}
-              style={[styles.input, errors.email && styles.inputError]}
-              placeholder="seuemail@exemplo.com"
-              placeholderTextColor="#999"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
-          </View>
-
-          {/* Telefone */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Telefone / WhatsApp</Text>
-            <TextInput
-              value={telefone}
-              onChangeText={(t) => { setTelefone(maskPhone(t)); clearError('telefone'); }}
-              style={[styles.input, errors.telefone && styles.inputError]}
-              placeholder="(11) 99999-9999"
-              placeholderTextColor="#999"
-              keyboardType="phone-pad"
-              maxLength={15}
-            />
-            {errors.telefone ? <Text style={styles.errorText}>{errors.telefone}</Text> : null}
-          </View>
-
-          {/* Senha */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Senha</Text>
-            <TextInput
-              value={senha}
-              onChangeText={(t) => { setSenha(t); clearError('senha'); }}
-              style={[styles.input, errors.senha && styles.inputError]}
-              placeholder="Mínimo 6 caracteres"
-              placeholderTextColor="#999"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {errors.senha ? <Text style={styles.errorText}>{errors.senha}</Text> : null}
-          </View>
-
-          {/* Confirmar Senha */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Confirmar senha</Text>
-            <TextInput
-              value={confirmarSenha}
-              onChangeText={(t) => { setConfirmarSenha(t); clearError('confirmarSenha'); }}
-              style={[styles.input, errors.confirmarSenha && styles.inputError]}
-              placeholder="Repita a senha"
-              placeholderTextColor="#999"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {errors.confirmarSenha ? (
-              <Text style={styles.errorText}>{errors.confirmarSenha}</Text>
-            ) : null}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleRegister}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Criar conta</Text>
+            {/* Campos exclusivos do barbeiro */}
+            {tipo === 'barbeiro' && (
+              <>
+                <View style={s.inputContainer}>
+                  <Text style={s.label}>Especialidade</Text>
+                  <TextInput
+                    value={especialidade}
+                    onChangeText={setEspecialidade}
+                    style={s.input}
+                    placeholder="Ex: Corte, barba e sobrancelha"
+                    placeholderTextColor={theme.colors.textMuted}
+                    autoCapitalize="sentences"
+                    accessibilityLabel="Especialidade do barbeiro"
+                  />
+                </View>
+                <View style={s.inputContainer}>
+                  <Text style={s.label}>Preço do serviço (R$)</Text>
+                  <TextInput
+                    value={preco}
+                    onChangeText={setPreco}
+                    style={s.input}
+                    placeholder="Ex: 35,00"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="numeric"
+                    accessibilityLabel="Preço do serviço em reais"
+                  />
+                </View>
+              </>
             )}
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.loginLink}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.loginLinkText}>
-              Já tem conta?{' '}
-              <Text style={styles.loginLinkBold}>Entrar</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            {/* Nome */}
+            <View style={s.inputContainer}>
+              <Text style={s.label}>Nome completo</Text>
+              <TextInput
+                value={nome}
+                onChangeText={(t) => { setNome(t); clearError('nome'); }}
+                style={[s.input, errors.nome && s.inputError]}
+                placeholder="Seu nome completo"
+                placeholderTextColor={theme.colors.textMuted}
+                autoCapitalize="words"
+                autoCorrect={false}
+                accessibilityLabel="Nome completo"
+              />
+              {errors.nome ? <Text style={s.errorText}>{errors.nome}</Text> : null}
+            </View>
+
+            {/* Email */}
+            <View style={s.inputContainer}>
+              <Text style={s.label}>Email</Text>
+              <TextInput
+                value={email}
+                onChangeText={(t) => { setEmail(t); clearError('email'); }}
+                style={[s.input, errors.email && s.inputError]}
+                placeholder="seuemail@exemplo.com"
+                placeholderTextColor={theme.colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                accessibilityLabel="Email"
+              />
+              {errors.email ? <Text style={s.errorText}>{errors.email}</Text> : null}
+            </View>
+
+            {/* Telefone */}
+            <View style={s.inputContainer}>
+              <Text style={s.label}>Telefone / WhatsApp</Text>
+              <TextInput
+                value={telefone}
+                onChangeText={(t) => { setTelefone(maskPhone(t)); clearError('telefone'); }}
+                style={[s.input, errors.telefone && s.inputError]}
+                placeholder="(11) 99999-9999"
+                placeholderTextColor={theme.colors.textMuted}
+                keyboardType="phone-pad"
+                maxLength={15}
+                accessibilityLabel="Telefone ou WhatsApp"
+              />
+              {errors.telefone ? <Text style={s.errorText}>{errors.telefone}</Text> : null}
+            </View>
+
+            {/* Senha */}
+            <View style={s.inputContainer}>
+              <Text style={s.label}>Senha</Text>
+              <TextInput
+                value={senha}
+                onChangeText={(t) => { setSenha(t); clearError('senha'); }}
+                style={[s.input, errors.senha && s.inputError]}
+                placeholder="Mínimo 6 caracteres"
+                placeholderTextColor={theme.colors.textMuted}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                accessibilityLabel="Senha"
+              />
+              {errors.senha ? <Text style={s.errorText}>{errors.senha}</Text> : null}
+            </View>
+
+            {/* Confirmar Senha */}
+            <View style={s.inputContainer}>
+              <Text style={s.label}>Confirmar senha</Text>
+              <TextInput
+                value={confirmarSenha}
+                onChangeText={(t) => { setConfirmarSenha(t); clearError('confirmarSenha'); }}
+                style={[s.input, errors.confirmarSenha && s.inputError]}
+                placeholder="Repita a senha"
+                placeholderTextColor={theme.colors.textMuted}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                accessibilityLabel="Confirmar senha"
+              />
+              {errors.confirmarSenha ? (
+                <Text style={s.errorText}>{errors.confirmarSenha}</Text>
+              ) : null}
+            </View>
+
+            <TouchableOpacity
+              style={[s.button, loading && s.buttonDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Criar conta"
+              accessibilityState={{ disabled: loading }}
+              onPress={handleRegister}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={s.buttonText}>Criar conta</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.loginLink}
+              accessibilityRole="button"
+              accessibilityLabel="Voltar para login"
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={s.loginLinkText}>
+                Já tem conta?{' '}
+                <Text style={s.loginLinkBold}>Entrar</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
+const getStyles = (theme) => StyleSheet.create({
+  safeArea: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,
@@ -328,20 +344,20 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
   },
   form: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     borderRadius: 12,
     padding: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -355,21 +371,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: theme.colors.border,
     alignItems: 'center',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.colors.surfaceVariant,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   tipoButtonActive: {
-    borderColor: '#3498db',
-    backgroundColor: '#ebf5fb',
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.isDark ? theme.colors.surfaceVariant : '#ebf5fb',
   },
   tipoButtonText: {
     fontSize: 15,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
     fontWeight: '600',
   },
   tipoButtonTextActive: {
-    color: '#3498db',
+    color: theme.colors.primary,
   },
   inputContainer: {
     marginBottom: 16,
@@ -377,36 +395,38 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.colors.text,
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.colors.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
-    color: '#2c3e50',
+    backgroundColor: theme.colors.surfaceVariant,
+    color: theme.colors.text,
+    minHeight: 48,
   },
   inputError: {
-    borderColor: '#e74c3c',
-    backgroundColor: '#fdf2f2',
+    borderColor: theme.colors.error,
   },
   errorText: {
-    color: '#e74c3c',
+    color: theme.colors.error,
     fontSize: 13,
     marginTop: 4,
   },
   button: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.colors.primary,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   buttonDisabled: {
-    backgroundColor: '#bdc3c7',
+    backgroundColor: theme.colors.textMuted,
   },
   buttonText: {
     color: '#fff',
@@ -416,13 +436,16 @@ const styles = StyleSheet.create({
   loginLink: {
     alignItems: 'center',
     marginTop: 20,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   loginLinkText: {
     fontSize: 15,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
   },
   loginLinkBold: {
-    color: '#3498db',
+    color: theme.colors.primary,
     fontWeight: '600',
   },
 });

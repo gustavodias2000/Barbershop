@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { db, auth } from '../../firebase';
 import {
   collection,
@@ -19,23 +20,25 @@ import {
   where,
   orderBy,
   getDoc,
+  limit,
 } from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import { liberarSlot } from '../services/OcupacaoService';
 import { formatDateTime } from '../utils/dateUtils';
+import { useTheme } from '../context/ThemeContext';
+import { getStatusColor, getStatusText } from '../utils/statusUtils';
 
 export default function BarbeiroHome({ navigation }) {
+  const { theme } = useTheme();
+  const s = getStyles(theme);
+
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
-  const [stats, setStats] = useState({
-    pendentes: 0,
-    confirmados: 0,
-    total: 0,
-  });
+  const [stats, setStats] = useState({ pendentes: 0, confirmados: 0, total: 0 });
 
   useEffect(() => {
     fetchAll();
@@ -57,9 +60,7 @@ export default function BarbeiroHome({ navigation }) {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
       const userDoc = await getDoc(doc(db, 'usuarios', uid));
-      if (userDoc.exists()) {
-        setUserProfile(userDoc.data());
-      }
+      if (userDoc.exists()) setUserProfile(userDoc.data());
     } catch (error) {
       console.error('Erro ao buscar perfil:', error);
     }
@@ -70,23 +71,22 @@ export default function BarbeiroHome({ navigation }) {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
 
-      // CORRIGIDO (item 2): filtra apenas os agendamentos DESTE barbeiro.
-      // Antes lia a coleção inteira, expondo clientes de todos os barbeiros.
       const q = query(
         collection(db, 'agendamentos'),
         where('barbeiroId', '==', uid),
         orderBy('createdAt', 'desc'),
+        limit(50),
       );
 
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const snap = await getDocs(q);
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
       setAgendamentos(data);
-
-      const pendentes = data.filter((ag) => ag.status === 'pendente').length;
-      const confirmados = data.filter((ag) => ag.status === 'confirmado').length;
-
-      setStats({ pendentes, confirmados, total: data.length });
+      setStats({
+        pendentes: data.filter((ag) => ag.status === 'pendente').length,
+        confirmados: data.filter((ag) => ag.status === 'confirmado').length,
+        total: data.length,
+      });
     } catch (error) {
       console.error('Erro ao buscar agendamentos:', error);
       Alert.alert('Erro', 'Não foi possível carregar os agendamentos.');
@@ -114,13 +114,11 @@ export default function BarbeiroHome({ navigation }) {
           text: 'Confirmar',
           onPress: async () => {
             try {
-              const ref = doc(db, 'agendamentos', agendamento.id);
-              await updateDoc(ref, {
+              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
                 status: 'confirmado',
                 confirmedAt: new Date(),
               });
 
-              // Enviar confirmação via WhatsApp se tiver telefone do cliente
               const clienteTelefone = agendamento.clienteTelefone;
               if (clienteTelefone) {
                 const barbeiroNome =
@@ -172,13 +170,11 @@ export default function BarbeiroHome({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const ref = doc(db, 'agendamentos', agendamento.id);
-              await updateDoc(ref, {
+              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
                 status: 'cancelado',
                 cancelledAt: new Date(),
               });
 
-              // Libera o horário para outros clientes
               await liberarSlot(
                 agendamento.barbeiroId,
                 agendamento.data,
@@ -193,12 +189,10 @@ export default function BarbeiroHome({ navigation }) {
                   agendamento.horario,
                   'Reagendamento necessário',
                 );
-
                 const enviado = await WhatsAppService.sendTextMessage(
                   clienteTelefone,
                   mensagem,
                 );
-
                 Alert.alert(
                   'Cancelado',
                   enviado
@@ -230,8 +224,7 @@ export default function BarbeiroHome({ navigation }) {
           text: 'Concluir',
           onPress: async () => {
             try {
-              const ref = doc(db, 'agendamentos', agendamento.id);
-              await updateDoc(ref, {
+              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
                 status: 'concluido',
                 concludedAt: new Date(),
               });
@@ -247,85 +240,78 @@ export default function BarbeiroHome({ navigation }) {
     );
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'confirmado': return '#27ae60';
-      case 'cancelado': return '#e74c3c';
-      case 'concluido': return '#8e44ad';
-      default: return '#f39c12';
-    }
-  };
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'confirmado': return 'Confirmado';
-      case 'cancelado': return 'Cancelado';
-      case 'concluido': return 'Concluído';
-      default: return 'Pendente';
-    }
-  };
-
   const renderAgendamento = ({ item }) => (
-    <View style={styles.agendamentoCard}>
-      <View style={styles.agendamentoHeader}>
-        <View style={styles.clienteInfo}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
+    <View style={s.agendamentoCard}>
+      <View style={s.agendamentoHeader}>
+        <View style={s.clienteInfo}>
+          <View style={s.avatarContainer} accessibilityElementsHidden>
+            <Text style={s.avatarText}>
               {item.clienteNome ? item.clienteNome.charAt(0).toUpperCase() : 'C'}
             </Text>
           </View>
-          <View style={styles.clienteDetails}>
-            <Text style={styles.clienteNome}>{item.clienteNome || 'Cliente'}</Text>
-            <Text style={styles.clienteEmail}>{item.cliente}</Text>
+          <View style={s.clienteDetails}>
+            <Text style={s.clienteNome}>{item.clienteNome || 'Cliente'}</Text>
+            <Text style={s.clienteEmail}>{item.cliente}</Text>
           </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+        <View
+          style={[s.statusBadge, { backgroundColor: getStatusColor(item.status) }]}
+          accessibilityLabel={`Status: ${getStatusText(item.status)}`}
+        >
+          <Text style={s.statusText}>{getStatusText(item.status)}</Text>
         </View>
       </View>
 
-      <View style={styles.agendamentoInfo}>
-        <Text style={styles.agendamentoData}>
+      <View style={s.agendamentoInfo}>
+        <Text style={s.agendamentoData}>
           📅 {item.data} às {item.horario}
         </Text>
-        <Text style={styles.agendamentoServico}>
+        <Text style={s.agendamentoServico}>
           ✂️ {item.servico || 'Corte e barba'} · R$ {item.preco || '25,00'}
         </Text>
-        <Text style={styles.agendamentoCreated}>
+        <Text style={s.agendamentoCreated}>
           Solicitado em: {formatDateTime(item.createdAt)}
         </Text>
       </View>
 
       {item.status === 'pendente' && (
-        <View style={styles.actionButtons}>
+        <View style={s.actionButtons}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.confirmarButton]}
+            style={[s.actionButton, s.confirmarButton]}
+            accessibilityRole="button"
+            accessibilityLabel={`Confirmar agendamento de ${item.clienteNome}`}
             onPress={() => confirmar(item)}
           >
-            <Text style={styles.actionButtonText}>Confirmar</Text>
+            <Text style={s.actionButtonText}>Confirmar</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.cancelarButton]}
+            style={[s.actionButton, s.cancelarButton]}
+            accessibilityRole="button"
+            accessibilityLabel={`Cancelar agendamento de ${item.clienteNome}`}
             onPress={() => cancelar(item)}
           >
-            <Text style={styles.actionButtonText}>Cancelar</Text>
+            <Text style={s.actionButtonText}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {item.status === 'confirmado' && (
-        <View style={styles.actionButtons}>
+        <View style={s.actionButtons}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.concluirButton]}
+            style={[s.actionButton, s.concluirButton]}
+            accessibilityRole="button"
+            accessibilityLabel={`Marcar atendimento de ${item.clienteNome} como concluído`}
             onPress={() => concluir(item)}
           >
-            <Text style={styles.actionButtonText}>Marcar Concluído</Text>
+            <Text style={s.actionButtonText}>Marcar Concluído</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.cancelarButton]}
+            style={[s.actionButton, s.cancelarButton]}
+            accessibilityRole="button"
+            accessibilityLabel={`Cancelar agendamento confirmado de ${item.clienteNome}`}
             onPress={() => cancelar(item)}
           >
-            <Text style={styles.actionButtonText}>Cancelar</Text>
+            <Text style={s.actionButtonText}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -334,44 +320,48 @@ export default function BarbeiroHome({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loadingText}>Carregando agendamentos...</Text>
-      </View>
+      <SafeAreaView style={s.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={s.loadingText}>Carregando agendamentos...</Text>
+      </SafeAreaView>
     );
   }
 
   const barbeiroNome = userProfile?.nome
     ? userProfile.nome.split(' ')[0]
     : 'Barbeiro';
-
-  // CORRIGIDO: usa o uid real do barbeiro logado para o AnalyticsDashboard
   const barbeiroUid = auth.currentUser?.uid || '';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <View style={s.header}>
         <View>
-          <Text style={styles.greeting}>Olá, {barbeiroNome}!</Text>
-          <Text style={styles.title}>Painel do Barbeiro</Text>
+          <Text style={s.greeting}>Olá, {barbeiroNome}!</Text>
+          <Text style={s.title}>Painel do Barbeiro</Text>
         </View>
-        <View style={styles.headerButtons}>
+        <View style={s.headerButtons}>
           <TouchableOpacity
-            style={styles.perfilButton}
+            style={s.perfilButton}
+            accessibilityRole="button"
+            accessibilityLabel="Meu perfil"
             onPress={() => navigation.navigate('Perfil')}
           >
-            <Text style={styles.perfilButtonText}>👤</Text>
+            <Text style={s.perfilButtonText}>👤</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.analyticsButton}
+            style={s.analyticsButton}
+            accessibilityRole="button"
+            accessibilityLabel={showAnalytics ? 'Ver agenda' : 'Ver analytics'}
             onPress={() => setShowAnalytics(!showAnalytics)}
           >
-            <Text style={styles.analyticsButtonText}>
+            <Text style={s.analyticsButtonText}>
               {showAnalytics ? 'Agenda' : 'Analytics'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.profileButton}
+            style={s.profileButton}
+            accessibilityRole="button"
+            accessibilityLabel="Sair do aplicativo"
             onPress={() =>
               Alert.alert('Sair', 'Deseja realmente sair?', [
                 { text: 'Cancelar', style: 'cancel' },
@@ -386,28 +376,27 @@ export default function BarbeiroHome({ navigation }) {
               ])
             }
           >
-            <Text style={styles.profileButtonText}>Sair</Text>
+            <Text style={s.profileButtonText}>Sair</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {showAnalytics ? (
-        // CORRIGIDO: passa o uid real do barbeiro logado
         <AnalyticsDashboard barbeiroId={barbeiroUid} />
       ) : (
         <>
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{stats.pendentes}</Text>
-              <Text style={styles.statLabel}>Pendentes</Text>
+          <View style={s.statsContainer}>
+            <View style={s.statCard}>
+              <Text style={s.statNumber}>{stats.pendentes}</Text>
+              <Text style={s.statLabel}>Pendentes</Text>
             </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{stats.confirmados}</Text>
-              <Text style={styles.statLabel}>Confirmados</Text>
+            <View style={s.statCard}>
+              <Text style={s.statNumber}>{stats.confirmados}</Text>
+              <Text style={s.statLabel}>Confirmados</Text>
             </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{stats.total}</Text>
-              <Text style={styles.statLabel}>Total</Text>
+            <View style={s.statCard}>
+              <Text style={s.statNumber}>{stats.total}</Text>
+              <Text style={s.statLabel}>Total</Text>
             </View>
           </View>
 
@@ -416,57 +405,61 @@ export default function BarbeiroHome({ navigation }) {
             keyExtractor={(item) => item.id}
             renderItem={renderAgendamento}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={theme.colors.primary}
+              />
             }
             ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>Nenhum agendamento encontrado</Text>
-                <Text style={styles.emptySubtext}>
+              <View style={s.emptyContainer}>
+                <Text style={s.emptyText}>Nenhum agendamento encontrado</Text>
+                <Text style={s.emptySubtext}>
                   Os agendamentos aparecerão aqui quando os clientes solicitarem
                 </Text>
               </View>
             }
-            contentContainerStyle={agendamentos.length === 0 && styles.emptyList}
+            contentContainerStyle={agendamentos.length === 0 && s.emptyList}
           />
         </>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: theme.colors.border,
   },
   greeting: {
     fontSize: 13,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   headerButtons: {
     flexDirection: 'row',
@@ -474,21 +467,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   perfilButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ecf0f1',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.colors.surfaceVariant,
     justifyContent: 'center',
     alignItems: 'center',
   },
   perfilButtonText: {
-    fontSize: 18,
+    fontSize: 20,
   },
   analyticsButton: {
-    backgroundColor: '#9b59b6',
+    backgroundColor: '#8e44ad',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   analyticsButtonText: {
     color: '#fff',
@@ -496,10 +491,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   profileButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: theme.colors.error,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   profileButtonText: {
     color: '#fff',
@@ -513,35 +510,35 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 3,
   },
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#3498db',
+    color: theme.colors.primary,
   },
   statLabel: {
     fontSize: 13,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
     marginTop: 4,
   },
   agendamentoCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     marginHorizontal: 16,
     marginVertical: 8,
     padding: 16,
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -560,7 +557,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3498db',
+    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -576,11 +573,11 @@ const styles = StyleSheet.create({
   clienteNome: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   clienteEmail: {
     fontSize: 13,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -597,17 +594,17 @@ const styles = StyleSheet.create({
   },
   agendamentoData: {
     fontSize: 15,
-    color: '#2c3e50',
+    color: theme.colors.text,
     marginBottom: 4,
   },
   agendamentoServico: {
     fontSize: 14,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
     marginBottom: 4,
   },
   agendamentoCreated: {
     fontSize: 12,
-    color: '#bdc3c7',
+    color: theme.colors.textMuted,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -615,18 +612,20 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   confirmarButton: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.colors.success,
   },
   cancelarButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: theme.colors.error,
   },
   concluirButton: {
-    backgroundColor: '#9b59b6',
+    backgroundColor: '#8e44ad',
   },
   actionButtonText: {
     color: '#fff',
@@ -643,12 +642,12 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#bdc3c7',
+    color: theme.colors.textMuted,
     textAlign: 'center',
     paddingHorizontal: 40,
   },

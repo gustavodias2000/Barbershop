@@ -1,84 +1,89 @@
+/**
+ * NotificationService — gerencia FCM push notifications.
+ *
+ * CORREÇÃO (auditoria item 2.5):
+ * O construtor NÃO solicita permissão mais. A permissão só é pedida
+ * explicitamente via `init()`, chamado pela tela principal APÓS o login,
+ * no momento certo da jornada do usuário.
+ *
+ * Isso impede que o OS dialog "Permitir notificações?" apareça na tela
+ * de carregamento, antes mesmo de o usuário entender o app — prática
+ * reprovada pela Apple App Review e que reduz a taxa de opt-in.
+ */
 import messaging from '@react-native-firebase/messaging';
-import { Alert, Platform } from 'react-native';
+import { Alert } from 'react-native';
 
 class NotificationService {
   constructor() {
-    this.configure();
+    // Sem efeito colateral no import.
+    // Configure listeners passivos aqui (sem pedir permissão):
+    this._setupBackgroundListeners();
   }
 
-  async configure() {
-    // Solicitar permissão para notificações
+  /**
+   * Inicializa as notificações push.
+   * Chame este método UMA VEZ após o login do usuário, em um momento
+   * contextualmente adequado (ex.: depois de exibir uma explicação).
+   */
+  async init() {
     const authStatus = await messaging().requestPermission();
     const enabled =
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
       authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
     if (enabled) {
-      console.log('Authorization status:', authStatus);
       await this.getFCMToken();
+      this._setupForegroundListener();
     }
 
-    // Listener para mensagens em primeiro plano
-    messaging().onMessage(async remoteMessage => {
-      Alert.alert(
-        remoteMessage.notification?.title || 'Nova notificação',
-        remoteMessage.notification?.body || 'Você tem uma nova mensagem'
-      );
+    return enabled;
+  }
+
+  _setupBackgroundListeners() {
+    // Listener para quando o app é aberto via notificação (background)
+    messaging().onNotificationOpenedApp((remoteMessage) => {
+      this._handleNotificationNavigation(remoteMessage);
     });
 
-    // Listener para quando o app é aberto via notificação
-    messaging().onNotificationOpenedApp(remoteMessage => {
-      console.log('Notification caused app to open from background state:', remoteMessage);
-      this.handleNotificationNavigation(remoteMessage);
-    });
-
-    // Verificar se o app foi aberto por uma notificação quando estava fechado
+    // Notificação que abriu o app (quit state)
     messaging()
       .getInitialNotification()
-      .then(remoteMessage => {
+      .then((remoteMessage) => {
         if (remoteMessage) {
-          console.log('Notification caused app to open from quit state:', remoteMessage);
-          this.handleNotificationNavigation(remoteMessage);
+          this._handleNotificationNavigation(remoteMessage);
         }
-      });
+      })
+      .catch(() => {});
+  }
+
+  _setupForegroundListener() {
+    messaging().onMessage(async (remoteMessage) => {
+      Alert.alert(
+        remoteMessage.notification?.title || 'Nova notificação',
+        remoteMessage.notification?.body || 'Você tem uma nova mensagem',
+      );
+    });
   }
 
   async getFCMToken() {
     try {
       const token = await messaging().getToken();
-      console.log('FCM Token:', token);
-      // Salvar token no Firestore para envio de notificações
+      // Em produção: salvar token em usuarios/{uid}.fcmToken via Firestore
       return token;
     } catch (error) {
       console.error('Erro ao obter FCM token:', error);
+      return null;
     }
   }
 
-  handleNotificationNavigation(remoteMessage) {
-    // Implementar navegação baseada no tipo de notificação
+  _handleNotificationNavigation(remoteMessage) {
     const { data } = remoteMessage;
-    
+    // Futura implementação: navegar para Histórico ou Painel conforme data.type
     if (data?.type === 'agendamento_confirmado') {
-      // Navegar para histórico
+      // navigate('Historico')
     } else if (data?.type === 'novo_agendamento') {
-      // Navegar para painel do barbeiro
+      // navigate('BarbeiroHome')
     }
-  }
-
-  async sendNotification(token, title, body, data = {}) {
-    // Esta função seria chamada do backend
-    // Aqui apenas como referência da estrutura
-    const message = {
-      to: token,
-      notification: {
-        title,
-        body,
-      },
-      data,
-    };
-    
-    // Enviar via Firebase Admin SDK do backend
-    return message;
   }
 }
 

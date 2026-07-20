@@ -8,8 +8,9 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
-  ScrollView,  // CORRIGIDO: ScrollView estava faltando no import
+  ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { db, auth } from '../../firebase';
 import {
   collection,
@@ -19,13 +20,27 @@ import {
   getDocs,
   updateDoc,
   doc,
+  limit,
 } from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import RatingComponent from '../components/RatingComponent';
 import { liberarSlot } from '../services/OcupacaoService';
-import { formatDate, formatDateTime } from '../utils/dateUtils';
+import { formatDateTime } from '../utils/dateUtils';
+import { useTheme } from '../context/ThemeContext';
+import { getStatusColor, getStatusText } from '../utils/statusUtils';
+
+const FILTROS = [
+  { key: 'todos',     label: 'Todos' },
+  { key: 'pendente',  label: 'Pendentes' },
+  { key: 'confirmado',label: 'Confirmados' },
+  { key: 'concluido', label: 'Concluídos' },
+  { key: 'cancelado', label: 'Cancelados' },
+];
 
 export default function HistoricoScreen({ navigation }) {
+  const { theme } = useTheme();
+  const s = getStyles(theme);
+
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,6 +63,7 @@ export default function HistoricoScreen({ navigation }) {
           collection(db, 'agendamentos'),
           where('cliente', '==', userEmail),
           orderBy('createdAt', 'desc'),
+          limit(50),
         );
       } else {
         q = query(
@@ -55,16 +71,12 @@ export default function HistoricoScreen({ navigation }) {
           where('cliente', '==', userEmail),
           where('status', '==', filtro),
           orderBy('createdAt', 'desc'),
+          limit(50),
         );
       }
 
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      setAgendamentos(data);
+      const snap = await getDocs(q);
+      setAgendamentos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (error) {
       console.error('Erro ao buscar histórico:', error);
       Alert.alert('Erro', 'Não foi possível carregar o histórico.');
@@ -80,7 +92,6 @@ export default function HistoricoScreen({ navigation }) {
     } catch (error) {
       console.error('Erro ao atualizar:', error);
     } finally {
-      // CORRIGIDO: refreshing agora sempre reseta, mesmo em caso de erro
       setRefreshing(false);
     }
   };
@@ -96,21 +107,18 @@ export default function HistoricoScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const ref = doc(db, 'agendamentos', agendamento.id);
-              await updateDoc(ref, {
+              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
                 status: 'cancelado',
                 cancelledAt: new Date(),
                 cancelledBy: 'cliente',
               });
 
-              // Libera o horário para outros clientes
               await liberarSlot(
                 agendamento.barbeiroId,
                 agendamento.data,
                 agendamento.horario,
               );
 
-              // Notificar barbeiro via WhatsApp se tiver telefone
               const barbeiroPhone = agendamento.barbeiroTelefone;
               if (barbeiroPhone) {
                 const mensagem = `Olá ${agendamento.barbeiroNome}!\n\nO cliente ${agendamento.clienteNome} cancelou o agendamento:\n\n📅 Data: ${agendamento.data}\n🕐 Horário: ${agendamento.horario}\n\nHorário liberado para outros clientes.`;
@@ -140,86 +148,77 @@ export default function HistoricoScreen({ navigation }) {
     navigation.navigate('Agendamento', { barbeiro });
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'confirmado': return '#27ae60';
-      case 'cancelado': return '#e74c3c';
-      case 'concluido': return '#8e44ad';
-      case 'avaliado': return '#2980b9';
-      default: return '#f39c12';
-    }
-  };
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'confirmado': return 'Confirmado';
-      case 'cancelado': return 'Cancelado';
-      case 'concluido': return 'Concluído';
-      case 'avaliado': return 'Avaliado';
-      default: return 'Pendente';
-    }
-  };
-
   const renderAgendamento = ({ item }) => (
-    <View style={styles.agendamentoCard}>
-      <View style={styles.cardHeader}>
-        <View style={styles.barbeiroInfo}>
-          <Text style={styles.barbeiroNome}>{item.barbeiroNome}</Text>
-          <Text style={styles.servico}>{item.servico || 'Corte e barba'}</Text>
+    <View style={s.agendamentoCard}>
+      <View style={s.cardHeader}>
+        <View style={s.barbeiroInfo}>
+          <Text style={s.barbeiroNome}>{item.barbeiroNome}</Text>
+          <Text style={s.servico}>{item.servico || 'Corte e barba'}</Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+        <View
+          style={[s.statusBadge, { backgroundColor: getStatusColor(item.status) }]}
+          accessibilityLabel={`Status: ${getStatusText(item.status)}`}
+        >
+          <Text style={s.statusText}>{getStatusText(item.status)}</Text>
         </View>
       </View>
 
-      <View style={styles.agendamentoDetails}>
-        <Text style={styles.dataHorario}>
+      <View style={s.agendamentoDetails}>
+        <Text style={s.dataHorario}>
           📅 {item.data} às {item.horario}
         </Text>
-        <Text style={styles.preco}>💰 R$ {item.preco || '25,00'}</Text>
-        <Text style={styles.criadoEm}>
+        <Text style={s.preco}>💰 R$ {item.preco || '25,00'}</Text>
+        <Text style={s.criadoEm}>
           Criado em: {formatDateTime(item.createdAt)}
         </Text>
       </View>
 
       {item.status === 'pendente' && (
-        <View style={styles.actionButtons}>
+        <View style={s.actionButtons}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.cancelButton]}
+            style={[s.actionButton, s.cancelButton]}
+            accessibilityRole="button"
+            accessibilityLabel="Cancelar este agendamento"
             onPress={() => cancelarAgendamento(item)}
           >
-            <Text style={styles.actionButtonText}>Cancelar</Text>
+            <Text style={s.actionButtonText}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {(item.status === 'cancelado' || item.status === 'concluido') && (
-        <View style={styles.actionButtons}>
+        <View style={s.actionButtons}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.reagendarButton]}
+            style={[s.actionButton, s.reagendarButton]}
+            accessibilityRole="button"
+            accessibilityLabel={`Reagendar com ${item.barbeiroNome}`}
             onPress={() => reagendar(item)}
           >
-            <Text style={styles.actionButtonText}>Reagendar</Text>
+            <Text style={s.actionButtonText}>Reagendar</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {item.status === 'confirmado' && (
-        <View style={styles.actionButtons}>
+        <View style={s.actionButtons}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.avaliarButton]}
+            style={[s.actionButton, s.avaliarButton]}
+            accessibilityRole="button"
+            accessibilityLabel={`Avaliar ${item.barbeiroNome}`}
             onPress={() => {
               setSelectedAgendamento(item);
               setShowRating(true);
             }}
           >
-            <Text style={styles.actionButtonText}>Avaliar</Text>
+            <Text style={s.actionButtonText}>Avaliar</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.cancelButton]}
+            style={[s.actionButton, s.cancelButton]}
+            accessibilityRole="button"
+            accessibilityLabel="Cancelar este agendamento"
             onPress={() => cancelarAgendamento(item)}
           >
-            <Text style={styles.actionButtonText}>Cancelar</Text>
+            <Text style={s.actionButtonText}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -227,18 +226,15 @@ export default function HistoricoScreen({ navigation }) {
   );
 
   const renderFiltros = () => (
-    <View style={styles.filtrosContainer}>
+    <View style={s.filtrosContainer}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {[
-          { key: 'todos', label: 'Todos' },
-          { key: 'pendente', label: 'Pendentes' },
-          { key: 'confirmado', label: 'Confirmados' },
-          { key: 'concluido', label: 'Concluídos' },
-          { key: 'cancelado', label: 'Cancelados' },
-        ].map((item) => (
+        {FILTROS.map((item) => (
           <TouchableOpacity
             key={item.key}
-            style={[styles.filtroButton, filtro === item.key && styles.filtroButtonActive]}
+            style={[s.filtroButton, filtro === item.key && s.filtroButtonActive]}
+            accessibilityRole="button"
+            accessibilityLabel={`Filtrar por: ${item.label}`}
+            accessibilityState={{ selected: filtro === item.key }}
             onPress={() => {
               setLoading(true);
               setFiltro(item.key);
@@ -246,8 +242,8 @@ export default function HistoricoScreen({ navigation }) {
           >
             <Text
               style={[
-                styles.filtroButtonText,
-                filtro === item.key && styles.filtroButtonTextActive,
+                s.filtroButtonText,
+                filtro === item.key && s.filtroButtonTextActive,
               ]}
             >
               {item.label}
@@ -260,17 +256,17 @@ export default function HistoricoScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loadingText}>Carregando histórico...</Text>
-      </View>
+      <SafeAreaView style={s.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={s.loadingText}>Carregando histórico...</Text>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Histórico de Agendamentos</Text>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <View style={s.header}>
+        <Text style={s.title}>Histórico de Agendamentos</Text>
       </View>
 
       {renderFiltros()}
@@ -280,21 +276,25 @@ export default function HistoricoScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderAgendamento}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+          />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
+          <View style={s.emptyContainer}>
+            <Text style={s.emptyText}>
               {filtro === 'todos'
                 ? 'Nenhum agendamento encontrado'
                 : `Nenhum agendamento ${getStatusText(filtro).toLowerCase()} encontrado`}
             </Text>
-            <Text style={styles.emptySubtext}>
+            <Text style={s.emptySubtext}>
               Seus agendamentos aparecerão aqui
             </Text>
           </View>
         }
-        contentContainerStyle={agendamentos.length === 0 && styles.emptyList}
+        contentContainerStyle={agendamentos.length === 0 && s.emptyList}
       />
 
       <RatingComponent
@@ -306,74 +306,76 @@ export default function HistoricoScreen({ navigation }) {
         }}
         agendamento={selectedAgendamento}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: theme.colors.border,
   },
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   filtrosContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: theme.colors.border,
   },
   filtroButton: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.surfaceVariant,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: theme.colors.border,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   filtroButtonActive: {
-    backgroundColor: '#3498db',
-    borderColor: '#3498db',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   filtroButtonText: {
     fontSize: 14,
-    color: '#495057',
+    color: theme.colors.textSecondary,
   },
   filtroButtonTextActive: {
     color: '#fff',
     fontWeight: 'bold',
   },
   agendamentoCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     marginHorizontal: 16,
     marginVertical: 8,
     padding: 16,
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -390,11 +392,11 @@ const styles = StyleSheet.create({
   barbeiroNome: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   servico: {
     fontSize: 14,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
     marginTop: 2,
   },
   statusBadge: {
@@ -412,18 +414,18 @@ const styles = StyleSheet.create({
   },
   dataHorario: {
     fontSize: 15,
-    color: '#2c3e50',
+    color: theme.colors.text,
     marginBottom: 4,
   },
   preco: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#27ae60',
+    color: theme.colors.success,
     marginBottom: 4,
   },
   criadoEm: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: theme.colors.textMuted,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -434,15 +436,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: theme.colors.error,
   },
   reagendarButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.colors.primary,
   },
   avaliarButton: {
-    backgroundColor: '#9b59b6',
+    backgroundColor: '#8e44ad',
   },
   actionButtonText: {
     color: '#fff',
@@ -459,12 +463,14 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 17,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
     marginBottom: 8,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#bdc3c7',
+    color: theme.colors.textMuted,
     textAlign: 'center',
   },
 });

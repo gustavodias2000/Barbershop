@@ -11,11 +11,16 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
+import { useTheme } from '../context/ThemeContext';
 
 export default function LoginScreen({ navigation }) {
+  const { theme } = useTheme();
+  const s = getStyles(theme);
+
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,7 +30,6 @@ export default function LoginScreen({ navigation }) {
 
   const validateForm = () => {
     const newErrors = {};
-
     if (!email.trim()) {
       newErrors.email = 'Email é obrigatório';
     } else if (!validateEmail(email.trim())) {
@@ -36,7 +40,6 @@ export default function LoginScreen({ navigation }) {
     } else if (senha.length < 6) {
       newErrors.senha = 'Senha deve ter pelo menos 6 caracteres';
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -49,7 +52,6 @@ export default function LoginScreen({ navigation }) {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), senha);
       const uid = userCredential.user.uid;
 
-      // Buscar role do usuário no Firestore (abordagem segura)
       const userDoc = await getDoc(doc(db, 'usuarios', uid));
 
       if (userDoc.exists()) {
@@ -60,15 +62,9 @@ export default function LoginScreen({ navigation }) {
           navigation.replace('Cliente');
         }
       } else {
-        // Fallback: usuários criados antes do sistema de roles
-        // Criar documento de usuário automaticamente
         const emailUser = userCredential.user.email || '';
         const tipo = emailUser.toLowerCase().includes('barbeiro') ? 'barbeiro' : 'cliente';
-        if (tipo === 'barbeiro') {
-          navigation.replace('Barbeiro');
-        } else {
-          navigation.replace('Cliente');
-        }
+        navigation.replace(tipo === 'barbeiro' ? 'Barbeiro' : 'Cliente');
       }
     } catch (error) {
       console.error('Erro no login:', error);
@@ -106,10 +102,7 @@ export default function LoginScreen({ navigation }) {
 
   const handleForgotPassword = () => {
     if (!email.trim()) {
-      Alert.alert(
-        'Recuperar senha',
-        'Digite seu email no campo acima e tente novamente.',
-      );
+      Alert.alert('Recuperar senha', 'Digite seu email no campo acima e tente novamente.');
       return;
     }
     if (!validateEmail(email.trim())) {
@@ -150,85 +143,107 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.title}>Barbershop</Text>
-          <Text style={styles.subtitle}>Faça seu login</Text>
-        </View>
-
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              value={email}
-              onChangeText={(text) => { setEmail(text); clearError('email'); }}
-              style={[styles.input, errors.email && styles.inputError]}
-              placeholder="Digite seu email"
-              placeholderTextColor="#999"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+    <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={s.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={s.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={s.header}>
+            <Text style={s.title}>Barbershop</Text>
+            <Text style={s.subtitle}>Faça seu login</Text>
           </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Senha</Text>
-            <TextInput
-              value={senha}
-              onChangeText={(text) => { setSenha(text); clearError('senha'); }}
-              style={[styles.input, errors.senha && styles.inputError]}
-              placeholder="Digite sua senha"
-              placeholderTextColor="#999"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {errors.senha ? <Text style={styles.errorText}>{errors.senha}</Text> : null}
+          <View style={s.form}>
+            <View style={s.inputContainer}>
+              <Text style={s.label}>Email</Text>
+              <TextInput
+                value={email}
+                onChangeText={(text) => { setEmail(text); clearError('email'); }}
+                style={[s.input, errors.email && s.inputError]}
+                placeholder="Digite seu email"
+                placeholderTextColor={theme.colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                accessibilityLabel="Campo de email"
+                accessibilityHint="Digite seu endereço de email"
+              />
+              {errors.email ? <Text style={s.errorText}>{errors.email}</Text> : null}
+            </View>
+
+            <View style={s.inputContainer}>
+              <Text style={s.label}>Senha</Text>
+              <TextInput
+                value={senha}
+                onChangeText={(text) => { setSenha(text); clearError('senha'); }}
+                style={[s.input, errors.senha && s.inputError]}
+                placeholder="Digite sua senha"
+                placeholderTextColor={theme.colors.textMuted}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                accessibilityLabel="Campo de senha"
+                accessibilityHint="Digite sua senha de acesso"
+              />
+              {errors.senha ? <Text style={s.errorText}>{errors.senha}</Text> : null}
+            </View>
+
+            <TouchableOpacity
+              style={[s.button, loading && s.buttonDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Entrar no aplicativo"
+              accessibilityState={{ disabled: loading }}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={s.buttonText}>Entrar</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.forgotPassword}
+              accessibilityRole="button"
+              accessibilityLabel="Esqueci minha senha"
+              onPress={handleForgotPassword}
+            >
+              <Text style={s.forgotPasswordText}>Esqueceu sua senha?</Text>
+            </TouchableOpacity>
+
+            <View style={s.divider}>
+              <View style={s.dividerLine} />
+              <Text style={s.dividerText}>ou</Text>
+              <View style={s.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={s.registerButton}
+              accessibilityRole="button"
+              accessibilityLabel="Criar nova conta"
+              onPress={() => navigation.navigate('Register')}
+            >
+              <Text style={s.registerButtonText}>Criar nova conta</Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.forgotPassword} onPress={handleForgotPassword}>
-            <Text style={styles.forgotPasswordText}>Esqueceu sua senha?</Text>
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ou</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <TouchableOpacity
-            style={styles.registerButton}
-            onPress={() => navigation.navigate('Register')}
-          >
-            <Text style={styles.registerButtonText}>Criar nova conta</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
+const getStyles = (theme) => StyleSheet.create({
+  safeArea: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,
@@ -242,20 +257,20 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
   },
   form: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     borderRadius: 12,
     padding: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -265,36 +280,38 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.colors.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
-    color: '#2c3e50',
+    backgroundColor: theme.colors.surfaceVariant,
+    color: theme.colors.text,
+    minHeight: 48,
   },
   inputError: {
-    borderColor: '#e74c3c',
-    backgroundColor: '#fdf2f2',
+    borderColor: theme.colors.error,
   },
   errorText: {
-    color: '#e74c3c',
+    color: theme.colors.error,
     fontSize: 14,
     marginTop: 4,
   },
   button: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.colors.primary,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     marginTop: 10,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   buttonDisabled: {
-    backgroundColor: '#bdc3c7',
+    backgroundColor: theme.colors.textMuted,
   },
   buttonText: {
     color: '#fff',
@@ -304,9 +321,12 @@ const styles = StyleSheet.create({
   forgotPassword: {
     alignItems: 'center',
     marginTop: 16,
+    paddingVertical: 8,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   forgotPasswordText: {
-    color: '#3498db',
+    color: theme.colors.primary,
     fontSize: 15,
   },
   divider: {
@@ -317,22 +337,24 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#ddd',
+    backgroundColor: theme.colors.border,
   },
   dividerText: {
     marginHorizontal: 12,
-    color: '#7f8c8d',
+    color: theme.colors.textSecondary,
     fontSize: 14,
   },
   registerButton: {
     borderWidth: 2,
-    borderColor: '#3498db',
+    borderColor: theme.colors.primary,
     borderRadius: 8,
     padding: 14,
     alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
   },
   registerButtonText: {
-    color: '#3498db',
+    color: theme.colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },
