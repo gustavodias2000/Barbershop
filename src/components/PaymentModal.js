@@ -136,7 +136,7 @@ export default function PaymentModal({ visible, onClose, agendamento, onPaymentS
           </View>
 
           <Text style={styles.securityText}>
-            🔒 Pagamento seguro processado pelo Stripe
+            🔒 Pagamento realizado no estabelecimento
           </Text>
         </View>
       </View>
