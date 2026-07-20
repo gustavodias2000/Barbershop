@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { auth, db } from '../../firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { useTheme } from '../context/ThemeContext';
 import ThemeSelector from '../components/ThemeSelector';
@@ -81,11 +81,29 @@ export default function PerfilScreen({ navigation }) {
     setSaving(true);
     try {
       const uid = auth.currentUser?.uid;
+      const telefoneE164 = formatPhoneToE164(telefone);
+
       await updateDoc(doc(db, 'usuarios', uid), {
         nome: nome.trim(),
-        telefone: formatPhoneToE164(telefone),
+        telefone: telefoneE164,
         updatedAt: new Date(),
       });
+
+      // Se for barbeiro, mantém a vitrine (coleção `barbeiros`) sincronizada.
+      // setDoc com merge também cria o doc caso o barbeiro seja antigo (item 3).
+      if (userData?.tipo === 'barbeiro') {
+        await setDoc(
+          doc(db, 'barbeiros', uid),
+          {
+            id: uid,
+            uid,
+            nome: nome.trim(),
+            telefone: telefoneE164,
+            updatedAt: new Date(),
+          },
+          { merge: true },
+        );
+      }
 
       Alert.alert('Sucesso!', 'Perfil atualizado com sucesso.');
     } catch (error) {

@@ -1,0 +1,76 @@
+rules_version = '2';
+
+// Regras de segurança do Firestore — Barbershop
+// Modelo: cada usuário só acessa os próprios dados; o barbeiro só acessa
+// os agendamentos em que é o dono (barbeiroId == seu uid).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Funções auxiliares ----
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Verifica no doc de perfil se o usuário logado é do tipo barbeiro
+    function isBarbeiro() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.tipo == 'barbeiro';
+    }
+
+    // ---- Perfis de usuário ----
+    match /usuarios/{uid} {
+      allow read:   if isOwner(uid);
+      allow create: if isOwner(uid);
+      // Impede o usuário de trocar o próprio "tipo" (anti-escalonamento de privilégio)
+      allow update: if isOwner(uid)
+                    && request.resource.data.tipo == resource.data.tipo;
+      allow delete: if false;
+    }
+
+    // ---- Barbeiros (vitrine pública para clientes logados) ----
+    match /barbeiros/{barbeiroId} {
+      allow read:  if isSignedIn();
+      // Só o próprio barbeiro (doc id == uid) e que seja do tipo barbeiro pode escrever
+      allow write: if isOwner(barbeiroId) && isBarbeiro();
+    }
+
+    // ---- Agendamentos (PRIVADOS: só o cliente dono ou o barbeiro dono) ----
+    match /agendamentos/{id} {
+      allow read: if isSignedIn()
+        && (resource.data.cliente == request.auth.token.email
+            || resource.data.barbeiroId == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.clienteUid == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && (resource.data.cliente == request.auth.token.email
+            || resource.data.barbeiroId == request.auth.uid);
+
+      allow delete: if isSignedIn()
+        && resource.data.barbeiroId == request.auth.uid;
+    }
+
+    // ---- Ocupação de horários (SEM dados pessoais) ----
+    // Usada apenas para o cliente checar quais horários estão livres.
+    // Não contém nome/email/telefone — por isso pode ser lida por qualquer logado.
+    match /ocupacoes/{slotId} {
+      allow read:          if isSignedIn();
+      allow create, delete: if isSignedIn();
+      allow update:        if false;
+    }
+
+    // ---- Avaliações ----
+    match /avaliacoes/{id} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.cliente == request.auth.token.email;
+      allow update, delete: if false;
+    }
+  }
+}

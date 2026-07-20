@@ -16,11 +16,13 @@ import {
   updateDoc,
   doc,
   query,
+  where,
   orderBy,
   getDoc,
 } from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
+import { liberarSlot } from '../services/OcupacaoService';
 import { formatDateTime } from '../utils/dateUtils';
 
 export default function BarbeiroHome({ navigation }) {
@@ -65,8 +67,14 @@ export default function BarbeiroHome({ navigation }) {
 
   const fetchAgendamentos = async () => {
     try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+
+      // CORRIGIDO (item 2): filtra apenas os agendamentos DESTE barbeiro.
+      // Antes lia a coleção inteira, expondo clientes de todos os barbeiros.
       const q = query(
         collection(db, 'agendamentos'),
+        where('barbeiroId', '==', uid),
         orderBy('createdAt', 'desc'),
       );
 
@@ -169,6 +177,13 @@ export default function BarbeiroHome({ navigation }) {
                 status: 'cancelado',
                 cancelledAt: new Date(),
               });
+
+              // Libera o horário para outros clientes
+              await liberarSlot(
+                agendamento.barbeiroId,
+                agendamento.data,
+                agendamento.horario,
+              );
 
               const clienteTelefone = agendamento.clienteTelefone;
               if (clienteTelefone) {

@@ -12,15 +12,13 @@ import { db, auth } from '../../firebase';
 import {
   collection,
   addDoc,
-  query,
-  where,
-  getDocs,
   doc,
   getDoc,
 } from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import PaymentModal from '../components/PaymentModal';
 import CalendarService from '../services/CalendarService';
+import { getHorariosOcupados, marcarOcupado } from '../services/OcupacaoService';
 import { getNextDays } from '../utils/dateUtils';
 
 export default function AgendamentoScreen({ route, navigation }) {
@@ -69,16 +67,10 @@ export default function AgendamentoScreen({ route, navigation }) {
   const fetchHorariosOcupados = async () => {
     setLoadingHorarios(true);
     try {
-      const q = query(
-        collection(db, 'agendamentos'),
-        where('barbeiroId', '==', barbeiro.id),
-        where('data', '==', selectedDate),
-        where('status', 'in', ['pendente', 'confirmado']),
-      );
-
-      const querySnapshot = await getDocs(q);
-      const agendamentos = querySnapshot.docs.map((d) => d.data());
-      const horariosOcupados = agendamentos.map((ag) => ag.horario);
+      // Lê a coleção `ocupacoes` (sem dados pessoais) em vez de `agendamentos`
+      // (que é privado). Assim a disponibilidade funciona mesmo com as regras
+      // de segurança que protegem os dados dos clientes.
+      const horariosOcupados = await getHorariosOcupados(barbeiro.id, selectedDate);
       const horariosDisponiveis = horariosPadrao.filter(
         (h) => !horariosOcupados.includes(h),
       );
@@ -129,6 +121,9 @@ export default function AgendamentoScreen({ route, navigation }) {
 
       // Salvar no Firestore
       await addDoc(collection(db, 'agendamentos'), novoAgendamento);
+
+      // Marca o horário como ocupado (coleção sem PII usada na disponibilidade)
+      await marcarOcupado(barbeiro.id, selectedDate, selectedTime);
 
       setCreatedAgendamento(novoAgendamento);
       setShowPaymentModal(true);

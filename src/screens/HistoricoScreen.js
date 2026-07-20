@@ -22,6 +22,7 @@ import {
 } from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import RatingComponent from '../components/RatingComponent';
+import { liberarSlot } from '../services/OcupacaoService';
 import { formatDate, formatDateTime } from '../utils/dateUtils';
 
 export default function HistoricoScreen({ navigation }) {
@@ -101,6 +102,13 @@ export default function HistoricoScreen({ navigation }) {
                 cancelledAt: new Date(),
                 cancelledBy: 'cliente',
               });
+
+              // Libera o horário para outros clientes
+              await liberarSlot(
+                agendamento.barbeiroId,
+                agendamento.data,
+                agendamento.horario,
+              );
 
               // Notificar barbeiro via WhatsApp se tiver telefone
               const barbeiroPhone = agendamento.barbeiroTelefone;

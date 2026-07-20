@@ -23,6 +23,9 @@ export default function RegisterScreen({ navigation }) {
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [tipo, setTipo] = useState('cliente'); // 'cliente' | 'barbeiro'
+  // Campos exclusivos do barbeiro (aparecem na vitrine para os clientes)
+  const [especialidade, setEspecialidade] = useState('');
+  const [preco, setPreco] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -68,18 +71,32 @@ export default function RegisterScreen({ navigation }) {
       );
       const { uid } = userCredential.user;
 
+      const telefoneE164 = formatPhoneToE164(telefone);
+
       // Salvar dados do usuário (incluindo role) no Firestore
       await setDoc(doc(db, 'usuarios', uid), {
         uid,
         nome: nome.trim(),
         email: email.trim().toLowerCase(),
-        telefone: formatPhoneToE164(telefone),
+        telefone: telefoneE164,
         tipo, // 'cliente' ou 'barbeiro'
         createdAt: new Date(),
       });
 
-      // Navegar para a tela correspondente ao tipo
+      // CORRIGIDO (item 3): se for barbeiro, cria também o documento na
+      // coleção `barbeiros` (a vitrine que os clientes veem para agendar).
+      // O ID do doc é o próprio uid, para que barbeiro.id === uid e o
+      // filtro de agendamentos por barbeiroId funcione corretamente.
       if (tipo === 'barbeiro') {
+        await setDoc(doc(db, 'barbeiros', uid), {
+          id: uid,
+          uid,
+          nome: nome.trim(),
+          telefone: telefoneE164,
+          especialidade: especialidade.trim() || 'Corte e barba',
+          preco: preco.trim() || '25,00',
+          createdAt: new Date(),
+        });
         navigation.replace('Barbeiro');
       } else {
         navigation.replace('Cliente');
@@ -157,6 +174,34 @@ export default function RegisterScreen({ navigation }) {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Campos exclusivos do barbeiro */}
+          {tipo === 'barbeiro' && (
+            <>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Especialidade</Text>
+                <TextInput
+                  value={especialidade}
+                  onChangeText={setEspecialidade}
+                  style={styles.input}
+                  placeholder="Ex: Corte, barba e sobrancelha"
+                  placeholderTextColor="#999"
+                  autoCapitalize="sentences"
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Preço do serviço (R$)</Text>
+                <TextInput
+                  value={preco}
+                  onChangeText={setPreco}
+                  style={styles.input}
+                  placeholder="Ex: 35,00"
+                  placeholderTextColor="#999"
+                  keyboardType="numeric"
+                />
+              </View>
+            </>
+          )}
 
           {/* Nome */}
           <View style={styles.inputContainer}>
