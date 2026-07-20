@@ -1,4 +1,6 @@
 import { Alert } from 'react-native';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../firebase';
 import { WHATSAPP_CONFIG, validateConfig } from './WhatsAppConfig';
 
 class WhatsAppService {
@@ -38,56 +40,18 @@ class WhatsAppService {
    * @returns {Promise<boolean>} - Sucesso ou falha do envio
    */
   async sendTextMessage(to, message) {
+    // O envio agora acontece via Cloud Function (`sendWhatsApp`), que guarda
+    // o token no servidor. O app NÃO carrega mais o token do WhatsApp.
     try {
-      if (!this.validation.isValid) {
-        if (this.config.fallback.DEBUG_MODE) {
-          console.warn('WhatsApp API não configurada:', this.validation.errors);
-        }
-        return this.fallbackToDirectLink(to, message);
-      }
-
-      const url = `${this.config.baseUrl}/${this.config.version}/${this.config.phoneNumberId}/messages`;
-      
-      const payload = {
-        messaging_product: 'whatsapp',
-        to: this.formatPhoneNumber(to),
-        type: 'text',
-        text: {
-          body: message
-        }
-      };
-
-      if (this.config.fallback.DEBUG_MODE) {
-        console.log('Sending WhatsApp message:', { url, payload });
-      }
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        if (this.config.fallback.DEBUG_MODE) {
-          console.log('Mensagem enviada com sucesso:', result);
-        }
-        return true;
-      } else {
-        console.error('Erro ao enviar mensagem:', result);
-        // Fallback para link direto em caso de erro
-        if (this.config.fallback.USE_DIRECT_LINK) {
-          return this.fallbackToDirectLink(to, message);
-        }
-        return false;
-      }
+      const sendWhatsApp = httpsCallable(functions, 'sendWhatsApp');
+      await sendWhatsApp({ to, message });
+      return true;
     } catch (error) {
-      console.error('Erro na requisição WhatsApp API:', error);
-      // Fallback para link direto em caso de erro
+      if (this.config.fallback.DEBUG_MODE) {
+        console.warn('Cloud Function do WhatsApp indisponível, usando fallback:', error?.message);
+      }
+      // Fallback: abre o WhatsApp no aparelho com a mensagem pronta.
+      // Útil enquanto a função não está publicada ou em caso de erro.
       if (this.config.fallback.USE_DIRECT_LINK) {
         return this.fallbackToDirectLink(to, message);
       }
