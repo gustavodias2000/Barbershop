@@ -9,6 +9,7 @@ import {
   Alert
 } from 'react-native';
 import PaymentService from '../services/PaymentService';
+import { precoParaCentavos } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
 
 export default function PaymentModal({ visible, onClose, agendamento, onPaymentSuccess }) {
@@ -16,8 +17,9 @@ export default function PaymentModal({ visible, onClose, agendamento, onPaymentS
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
-  const preco = parseFloat(agendamento?.preco?.replace(',', '.') || '25.00');
-  const precoEmCentavos = PaymentService.convertToCents(preco);
+  // Aceita tanto o campo novo (precoEmCentavos: int) quanto o legado (preco: string)
+  const precoEmCentavos =
+    agendamento?.precoEmCentavos ?? precoParaCentavos(agendamento?.preco);
 
   const handlePayment = async () => {
     setLoading(true);

@@ -1,6 +1,38 @@
 /**
- * Utilitários de formatação de data compartilhados entre telas.
+ * Utilitários de formatação de data e moeda compartilhados entre telas.
  */
+
+// ─── Moeda ────────────────────────────────────────────────────────────────────
+
+/**
+ * Converte preço legado (string "25,00") ou número (reais) para centavos inteiros.
+ */
+export const precoParaCentavos = (preco) => {
+  if (typeof preco === 'number') return Math.round(preco * 100);
+  if (typeof preco === 'string') {
+    return Math.round(parseFloat(preco.replace(',', '.') || '0') * 100);
+  }
+  return 2500; // fallback R$ 25,00
+};
+
+/**
+ * Formata centavos para exibição em BRL.
+ * Ex.: formatMoney(2500) → "R$ 25,00"
+ */
+export const formatMoney = (centavos) => {
+  const value = typeof centavos === 'number' ? centavos / 100 : 0;
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+/**
+ * Retorna o preço formatado de um documento barbeiro/agendamento.
+ * Aceita tanto o campo novo (precoEmCentavos: int) quanto o legado (preco: string).
+ */
+export const formatPreco = (doc) => {
+  if (doc?.precoEmCentavos != null) return formatMoney(doc.precoEmCentavos);
+  if (doc?.preco) return `R$ ${doc.preco}`;
+  return 'R$ 25,00';
+};
 
 /**
  * Formata uma data (Firestore Timestamp ou Date) para dd/mm/aaaa
@@ -39,6 +71,23 @@ export const formatDateTime = (date) => {
  * Retorna os próximos N dias úteis (sem domingos), com display formatado.
  * @param {number} qtd - Quantidade de dias (padrão 7)
  */
+/**
+ * Formata uma Date em YYYY-MM-DD usando a data LOCAL (não UTC).
+ * Evita o bug de timezone onde toISOString() pode retornar o dia anterior
+ * em fusos negativos (ex.: BRT = UTC-3).
+ */
+export const toLocalDateString = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+/**
+ * Retorna os próximos N dias úteis (sem domingos), com display formatado.
+ * Usa data local para evitar bug de timezone com toISOString().
+ * @param {number} qtd - Quantidade de dias (padrão 7)
+ */
 export const getNextDays = (qtd = 7) => {
   const days = [];
   const today = new Date();
@@ -52,7 +101,7 @@ export const getNextDays = (qtd = 7) => {
     // Pular domingos (0 = domingo)
     if (date.getDay() === 0) continue;
     days.push({
-      date: date.toISOString().split('T')[0],
+      date: toLocalDateString(date),
       display: date.toLocaleDateString('pt-BR', {
         weekday: 'short',
         day: '2-digit',

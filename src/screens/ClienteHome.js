@@ -25,6 +25,7 @@ import WhatsAppService from '../services/WhatsAppService';
 import NotificationService from '../services/NotificationService';
 import { useTheme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
+import { formatPreco } from '../utils/dateUtils';
 
 export default function ClienteHome({ navigation }) {
   const { theme } = useTheme();
@@ -118,7 +119,7 @@ export default function ClienteHome({ navigation }) {
           <Text style={s.barbeiroEspecialidade}>
             {item.especialidade || 'Corte e barba'}
           </Text>
-          <Text style={s.barbeiroPreco}>R$ {item.preco || '25,00'}</Text>
+          <Text style={s.barbeiroPreco}>{formatPreco(item)}</Text>
         </View>
       </View>
       <TouchableOpacity

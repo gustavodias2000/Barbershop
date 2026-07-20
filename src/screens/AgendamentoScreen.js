@@ -15,12 +15,13 @@ import {
   addDoc,
   doc,
   getDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import PaymentModal from '../components/PaymentModal';
 import CalendarService from '../services/CalendarService';
 import { getHorariosOcupados, marcarOcupado } from '../services/OcupacaoService';
-import { getNextDays } from '../utils/dateUtils';
+import { getNextDays, formatPreco, precoParaCentavos, toLocalDateString } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
 
 export default function AgendamentoScreen({ route, navigation }) {
@@ -45,6 +46,9 @@ export default function AgendamentoScreen({ route, navigation }) {
 
   const availableDates = getNextDays(7);
 
+  // Data de hoje em formato local YYYY-MM-DD (mesma lógica de getNextDays / toLocalDateString)
+  const todayStr = toLocalDateString(new Date());
+
   useEffect(() => {
     fetchUserProfile();
   }, []);
@@ -64,15 +68,31 @@ export default function AgendamentoScreen({ route, navigation }) {
     }
   };
 
+  /**
+   * Retorna true se o horário já passou (com buffer de 30 min para agendamento no dia).
+   * Só aplica quando selectedDate === hoje.
+   */
+  const isTimeInPast = (horario) => {
+    if (selectedDate !== todayStr) return false;
+    const [hh, mm] = horario.split(':').map(Number);
+    const now = new Date();
+    const slotMs = (hh * 60 + mm) * 60 * 1000;
+    const nowMs = (now.getHours() * 60 + now.getMinutes() + 30) * 60 * 1000; // +30 min buffer
+    return slotMs <= nowMs;
+  };
+
   const fetchHorariosOcupados = async () => {
     setLoadingHorarios(true);
     try {
       const horariosOcupados = await getHorariosOcupados(barbeiro.id, selectedDate);
-      setAvailableTimes(horariosPadrao.filter((h) => !horariosOcupados.includes(h)));
+      setAvailableTimes(
+        horariosPadrao.filter((h) => !horariosOcupados.includes(h) && !isTimeInPast(h)),
+      );
       setSelectedTime(null);
     } catch (error) {
       console.error('Erro ao buscar horários:', error);
-      setAvailableTimes(horariosPadrao);
+      // mesmo com erro, filtra passado
+      setAvailableTimes(horariosPadrao.filter((h) => !isTimeInPast(h)));
     } finally {
       setLoadingHorarios(false);
     }
@@ -96,6 +116,9 @@ export default function AgendamentoScreen({ route, navigation }) {
       const clienteTelefone = userProfile?.telefone || '';
       const barbeiroTelefone = barbeiro.telefone || '';
 
+      const precoDisplay = barbeiro.preco || '25,00';
+      const precoEmCentavos = barbeiro.precoEmCentavos ?? precoParaCentavos(precoDisplay);
+
       const novoAgendamento = {
         barbeiroId: barbeiro.id,
         barbeiroNome: barbeiro.nome,
@@ -105,11 +128,12 @@ export default function AgendamentoScreen({ route, navigation }) {
         clienteNome,
         clienteTelefone,
         status: 'pendente',
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
         data: selectedDate,
         horario: selectedTime,
         servico: barbeiro.especialidade || 'Corte e barba',
-        preco: barbeiro.preco || '25,00',
+        preco: precoDisplay,           // mantido p/ compatibilidade
+        precoEmCentavos,               // novo campo numérico em centavos
       };
 
       await addDoc(collection(db, 'agendamentos'), novoAgendamento);
@@ -179,7 +203,7 @@ export default function AgendamentoScreen({ route, navigation }) {
         <View style={s.header}>
           <Text style={s.title}>Agendar com {barbeiro.nome}</Text>
           <Text style={s.subtitle}>{barbeiro.especialidade || 'Corte e barba'}</Text>
-          <Text style={s.price}>R$ {barbeiro.preco || '25,00'}</Text>
+          <Text style={s.price}>{formatPreco(barbeiro)}</Text>
         </View>
 
         {/* Seleção de data */}
@@ -249,7 +273,9 @@ export default function AgendamentoScreen({ route, navigation }) {
             ) : (
               <View style={s.noTimesContainer}>
                 <Text style={s.noTimesText}>
-                  Não há horários disponíveis para esta data. Escolha outro dia.
+                  {selectedDate === todayStr
+                    ? 'Não há horários disponíveis para hoje. Escolha outro dia.'
+                    : 'Não há horários disponíveis para esta data. Escolha outro dia.'}
                 </Text>
               </View>
             )}
@@ -286,7 +312,7 @@ export default function AgendamentoScreen({ route, navigation }) {
               ))}
               <View style={[s.summaryRow, s.summaryTotal]}>
                 <Text style={s.summaryTotalLabel}>Total:</Text>
-                <Text style={s.summaryPrice}>R$ {barbeiro.preco || '25,00'}</Text>
+                <Text style={s.summaryPrice}>{formatPreco(barbeiro)}</Text>
               </View>
             </View>
 

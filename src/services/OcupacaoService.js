@@ -18,6 +18,7 @@ import {
   setDoc,
   deleteDoc,
   doc,
+  serverTimestamp,
 } from 'firebase/firestore';
 
 // ID determinístico do slot: evita duplicidade e facilita liberar depois.
@@ -48,7 +49,7 @@ export async function marcarOcupado(barbeiroId, data, horario) {
     barbeiroId,
     data,
     horario,
-    createdAt: new Date(),
+    createdAt: serverTimestamp(),
   });
 }
 

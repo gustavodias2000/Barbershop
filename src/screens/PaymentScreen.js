@@ -9,16 +9,18 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import PaymentService from '../services/PaymentService';
+import { formatPreco, precoParaCentavos } from '../utils/dateUtils';
 import { db } from '../../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function PaymentScreen({ route, navigation }) {
   const { agendamento } = route.params;
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
-  const preco = parseFloat(agendamento?.preco?.replace(',', '.') || '25.00');
-  const precoEmCentavos = PaymentService.convertToCents(preco);
+  // Aceita tanto o campo novo (precoEmCentavos: int) quanto o legado (preco: string)
+  const precoEmCentavos = agendamento?.precoEmCentavos
+    ?? precoParaCentavos(agendamento?.preco);
 
   const handlePresentialPayment = () => {
     Alert.alert(
@@ -33,7 +35,7 @@ export default function PaymentScreen({ route, navigation }) {
               await updateDoc(doc(db, 'agendamentos', agendamento.id), {
                 status: 'confirmado',
                 paymentMethod: 'presencial',
-                confirmedAt: new Date()
+                confirmedAt: serverTimestamp(),
               });
               
               Alert.alert(

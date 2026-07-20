@@ -13,9 +13,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
-import { maskPhone, formatPhoneToE164 } from '../utils/dateUtils';
+import { maskPhone, formatPhoneToE164, precoParaCentavos } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
 
 export default function RegisterScreen({ navigation }) {
@@ -81,19 +81,21 @@ export default function RegisterScreen({ navigation }) {
         email: email.trim().toLowerCase(),
         telefone: telefoneE164,
         tipo,
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       });
 
       // CORRIGIDO (item 3): barbeiro também aparece na vitrine para os clientes
       if (tipo === 'barbeiro') {
+        const precoDisplay = preco.trim() || '25,00';
         await setDoc(doc(db, 'barbeiros', uid), {
           id: uid,
           uid,
           nome: nome.trim(),
           telefone: telefoneE164,
           especialidade: especialidade.trim() || 'Corte e barba',
-          preco: preco.trim() || '25,00',
-          createdAt: new Date(),
+          preco: precoDisplay,                          // mantido p/ compatibilidade
+          precoEmCentavos: precoParaCentavos(precoDisplay), // novo campo numérico
+          createdAt: serverTimestamp(),
         });
         navigation.replace('Barbeiro');
       } else {
