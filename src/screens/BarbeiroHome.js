@@ -1,70 +1,99 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
   StyleSheet,
   Alert,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
 } from 'react-native';
 import { db, auth } from '../../firebase';
-import { collection, getDocs, updateDoc, doc, query, orderBy } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  updateDoc,
+  doc,
+  query,
+  orderBy,
+  getDoc,
+} from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
+import { formatDateTime } from '../utils/dateUtils';
 
 export default function BarbeiroHome({ navigation }) {
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   const [stats, setStats] = useState({
     pendentes: 0,
     confirmados: 0,
-    total: 0
+    total: 0,
   });
 
   useEffect(() => {
-    fetchAgendamentos();
+    fetchAll();
   }, []);
 
-  const fetchAgendamentos = async () => {
+  const fetchAll = async () => {
     try {
-      const q = query(
-        collection(db, 'agendamentos'),
-        orderBy('createdAt', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
-      
-      setAgendamentos(data);
-      
-      // Calcular estatísticas
-      const pendentes = data.filter(ag => ag.status === 'pendente').length;
-      const confirmados = data.filter(ag => ag.status === 'confirmado').length;
-      
-      setStats({
-        pendentes,
-        confirmados,
-        total: data.length
-      });
+      await Promise.all([fetchUserProfile(), fetchAgendamentos()]);
     } catch (error) {
-      console.error('Erro ao buscar agendamentos:', error);
-      Alert.alert('Erro', 'Não foi possível carregar os agendamentos.');
+      console.error('Erro ao carregar:', error);
+      Alert.alert('Erro', 'Não foi possível carregar os dados.');
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchUserProfile = async () => {
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+      const userDoc = await getDoc(doc(db, 'usuarios', uid));
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data());
+      }
+    } catch (error) {
+      console.error('Erro ao buscar perfil:', error);
+    }
+  };
+
+  const fetchAgendamentos = async () => {
+    try {
+      const q = query(
+        collection(db, 'agendamentos'),
+        orderBy('createdAt', 'desc'),
+      );
+
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      setAgendamentos(data);
+
+      const pendentes = data.filter((ag) => ag.status === 'pendente').length;
+      const confirmados = data.filter((ag) => ag.status === 'confirmado').length;
+
+      setStats({ pendentes, confirmados, total: data.length });
+    } catch (error) {
+      console.error('Erro ao buscar agendamentos:', error);
+      Alert.alert('Erro', 'Não foi possível carregar os agendamentos.');
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchAgendamentos();
-    setRefreshing(false);
+    try {
+      await Promise.all([fetchUserProfile(), fetchAgendamentos()]);
+    } catch (error) {
+      console.error('Erro ao atualizar:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const confirmar = async (agendamento) => {
@@ -73,50 +102,54 @@ export default function BarbeiroHome({ navigation }) {
       `Confirmar agendamento de ${agendamento.clienteNome}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Confirmar', 
+        {
+          text: 'Confirmar',
           onPress: async () => {
             try {
               const ref = doc(db, 'agendamentos', agendamento.id);
-              await updateDoc(ref, { 
+              await updateDoc(ref, {
                 status: 'confirmado',
-                confirmedAt: new Date()
+                confirmedAt: new Date(),
               });
-              
-              // Enviar confirmação via WhatsApp
-              const clienteInfo = {
-                nome: agendamento.clienteNome,
-                telefone: agendamento.clienteTelefone || '5511999999999' // Telefone do cliente
-              };
 
-              const barbeiroNome = auth.currentUser?.email?.split('@')[0] || 'Barbeiro';
+              // Enviar confirmação via WhatsApp se tiver telefone do cliente
+              const clienteTelefone = agendamento.clienteTelefone;
+              if (clienteTelefone) {
+                const barbeiroNome =
+                  userProfile?.nome ||
+                  auth.currentUser?.email?.split('@')[0] ||
+                  'Barbeiro';
 
-              const mensagem = WhatsAppService.gerarMensagemConfirmacao(
-                clienteInfo,
-                agendamento.data,
-                agendamento.horario,
-                barbeiroNome
-              );
+                const mensagem = WhatsAppService.gerarMensagemConfirmacao(
+                  { nome: agendamento.clienteNome, telefone: clienteTelefone },
+                  agendamento.data,
+                  agendamento.horario,
+                  barbeiroNome,
+                );
 
-              const whatsappEnviado = await WhatsAppService.sendTextMessage(
-                clienteInfo.telefone,
-                mensagem
-              );
+                const enviado = await WhatsAppService.sendTextMessage(
+                  clienteTelefone,
+                  mensagem,
+                );
 
-              if (whatsappEnviado) {
-                Alert.alert('Sucesso!', 'Agendamento confirmado e cliente notificado via WhatsApp!');
+                Alert.alert(
+                  'Sucesso!',
+                  enviado
+                    ? 'Agendamento confirmado e cliente notificado via WhatsApp!'
+                    : 'Agendamento confirmado. Cliente sem WhatsApp cadastrado.',
+                );
               } else {
-                Alert.alert('Sucesso!', 'Agendamento confirmado. Entre em contato com o cliente para informar.');
+                Alert.alert('Sucesso!', 'Agendamento confirmado.');
               }
-              
+
               await fetchAgendamentos();
             } catch (error) {
-              console.error('Erro ao confirmar agendamento:', error);
+              console.error('Erro ao confirmar:', error);
               Alert.alert('Erro', 'Não foi possível confirmar o agendamento.');
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -126,50 +159,95 @@ export default function BarbeiroHome({ navigation }) {
       `Cancelar agendamento de ${agendamento.clienteNome}?`,
       [
         { text: 'Não', style: 'cancel' },
-        { 
-          text: 'Sim, cancelar', 
+        {
+          text: 'Sim, cancelar',
           style: 'destructive',
           onPress: async () => {
             try {
               const ref = doc(db, 'agendamentos', agendamento.id);
-              await updateDoc(ref, { 
+              await updateDoc(ref, {
                 status: 'cancelado',
-                cancelledAt: new Date()
+                cancelledAt: new Date(),
               });
-              
-              // Enviar notificação de cancelamento via WhatsApp
-              const clienteInfo = {
-                nome: agendamento.clienteNome,
-                telefone: agendamento.clienteTelefone || '5511999999999'
-              };
 
-              const mensagem = WhatsAppService.gerarMensagemCancelamento(
-                clienteInfo,
-                agendamento.data,
-                agendamento.horario,
-                'Reagendamento necessário' // Motivo padrão
-              );
+              const clienteTelefone = agendamento.clienteTelefone;
+              if (clienteTelefone) {
+                const mensagem = WhatsAppService.gerarMensagemCancelamento(
+                  { nome: agendamento.clienteNome, telefone: clienteTelefone },
+                  agendamento.data,
+                  agendamento.horario,
+                  'Reagendamento necessário',
+                );
 
-              const whatsappEnviado = await WhatsAppService.sendTextMessage(
-                clienteInfo.telefone,
-                mensagem
-              );
+                const enviado = await WhatsAppService.sendTextMessage(
+                  clienteTelefone,
+                  mensagem,
+                );
 
-              if (whatsappEnviado) {
-                Alert.alert('Agendamento cancelado e cliente notificado via WhatsApp.');
+                Alert.alert(
+                  'Cancelado',
+                  enviado
+                    ? 'Agendamento cancelado e cliente notificado via WhatsApp.'
+                    : 'Agendamento cancelado.',
+                );
               } else {
-                Alert.alert('Agendamento cancelado. Entre em contato com o cliente para informar.');
+                Alert.alert('Cancelado', 'Agendamento cancelado.');
               }
-              
+
               await fetchAgendamentos();
             } catch (error) {
-              console.error('Erro ao cancelar agendamento:', error);
+              console.error('Erro ao cancelar:', error);
               Alert.alert('Erro', 'Não foi possível cancelar o agendamento.');
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
+  };
+
+  const concluir = async (agendamento) => {
+    Alert.alert(
+      'Concluir Atendimento',
+      `Marcar atendimento de ${agendamento.clienteNome} como concluído?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Concluir',
+          onPress: async () => {
+            try {
+              const ref = doc(db, 'agendamentos', agendamento.id);
+              await updateDoc(ref, {
+                status: 'concluido',
+                concludedAt: new Date(),
+              });
+              Alert.alert('Sucesso!', 'Atendimento marcado como concluído.');
+              await fetchAgendamentos();
+            } catch (error) {
+              console.error('Erro ao concluir:', error);
+              Alert.alert('Erro', 'Não foi possível concluir o atendimento.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'confirmado': return '#27ae60';
+      case 'cancelado': return '#e74c3c';
+      case 'concluido': return '#8e44ad';
+      default: return '#f39c12';
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'confirmado': return 'Confirmado';
+      case 'cancelado': return 'Cancelado';
+      case 'concluido': return 'Concluído';
+      default: return 'Pendente';
+    }
   };
 
   const renderAgendamento = ({ item }) => (
@@ -186,10 +264,7 @@ export default function BarbeiroHome({ navigation }) {
             <Text style={styles.clienteEmail}>{item.cliente}</Text>
           </View>
         </View>
-        <View style={[
-          styles.statusBadge, 
-          { backgroundColor: getStatusColor(item.status) }
-        ]}>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
         </View>
       </View>
@@ -198,21 +273,41 @@ export default function BarbeiroHome({ navigation }) {
         <Text style={styles.agendamentoData}>
           📅 {item.data} às {item.horario}
         </Text>
+        <Text style={styles.agendamentoServico}>
+          ✂️ {item.servico || 'Corte e barba'} · R$ {item.preco || '25,00'}
+        </Text>
         <Text style={styles.agendamentoCreated}>
-          Solicitado em: {formatDate(item.createdAt)}
+          Solicitado em: {formatDateTime(item.createdAt)}
         </Text>
       </View>
 
       {item.status === 'pendente' && (
         <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.confirmarButton]} 
+          <TouchableOpacity
+            style={[styles.actionButton, styles.confirmarButton]}
             onPress={() => confirmar(item)}
           >
             <Text style={styles.actionButtonText}>Confirmar</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.cancelarButton]} 
+          <TouchableOpacity
+            style={[styles.actionButton, styles.cancelarButton]}
+            onPress={() => cancelar(item)}
+          >
+            <Text style={styles.actionButtonText}>Cancelar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {item.status === 'confirmado' && (
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.concluirButton]}
+            onPress={() => concluir(item)}
+          >
+            <Text style={styles.actionButtonText}>Marcar Concluído</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.cancelarButton]}
             onPress={() => cancelar(item)}
           >
             <Text style={styles.actionButtonText}>Cancelar</Text>
@@ -221,37 +316,6 @@ export default function BarbeiroHome({ navigation }) {
       )}
     </View>
   );
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'confirmado': return '#27ae60';
-      case 'cancelado': return '#e74c3c';
-      default: return '#f39c12';
-    }
-  };
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'confirmado': return 'Confirmado';
-      case 'cancelado': return 'Cancelado';
-      default: return 'Pendente';
-    }
-  };
-
-  const formatDate = (date) => {
-    if (!date) return 'Data não disponível';
-    
-    try {
-      const dateObj = date.toDate ? date.toDate() : new Date(date);
-      return dateObj.toLocaleDateString('pt-BR') + ' ' + 
-             dateObj.toLocaleTimeString('pt-BR', { 
-               hour: '2-digit', 
-               minute: '2-digit' 
-             });
-    } catch (error) {
-      return 'Data inválida';
-    }
-  };
 
   if (loading) {
     return (
@@ -262,22 +326,50 @@ export default function BarbeiroHome({ navigation }) {
     );
   }
 
+  const barbeiroNome = userProfile?.nome
+    ? userProfile.nome.split(' ')[0]
+    : 'Barbeiro';
+
+  // CORRIGIDO: usa o uid real do barbeiro logado para o AnalyticsDashboard
+  const barbeiroUid = auth.currentUser?.uid || '';
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Painel do Barbeiro</Text>
+        <View>
+          <Text style={styles.greeting}>Olá, {barbeiroNome}!</Text>
+          <Text style={styles.title}>Painel do Barbeiro</Text>
+        </View>
         <View style={styles.headerButtons}>
-          <TouchableOpacity 
+          <TouchableOpacity
+            style={styles.perfilButton}
+            onPress={() => navigation.navigate('Perfil')}
+          >
+            <Text style={styles.perfilButtonText}>👤</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.analyticsButton}
             onPress={() => setShowAnalytics(!showAnalytics)}
           >
             <Text style={styles.analyticsButtonText}>
-              {showAnalytics ? 'Agendamentos' : 'Analytics'}
+              {showAnalytics ? 'Agenda' : 'Analytics'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => auth.signOut()}
+            onPress={() =>
+              Alert.alert('Sair', 'Deseja realmente sair?', [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Sair',
+                  style: 'destructive',
+                  onPress: async () => {
+                    await auth.signOut();
+                    navigation.replace('Login');
+                  },
+                },
+              ])
+            }
           >
             <Text style={styles.profileButtonText}>Sair</Text>
           </TouchableOpacity>
@@ -285,7 +377,8 @@ export default function BarbeiroHome({ navigation }) {
       </View>
 
       {showAnalytics ? (
-        <AnalyticsDashboard barbeiroId="barbeiro-id-atual" />
+        // CORRIGIDO: passa o uid real do barbeiro logado
+        <AnalyticsDashboard barbeiroId={barbeiroUid} />
       ) : (
         <>
           <View style={styles.statsContainer}>
@@ -305,7 +398,7 @@ export default function BarbeiroHome({ navigation }) {
 
           <FlatList
             data={agendamentos}
-            keyExtractor={item => item.id}
+            keyExtractor={(item) => item.id}
             renderItem={renderAgendamento}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -346,42 +439,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
+  greeting: {
+    fontSize: 13,
+    color: '#7f8c8d',
+  },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#2c3e50',
-    flex: 1,
   },
   headerButtons: {
     flexDirection: 'row',
     gap: 8,
+    alignItems: 'center',
+  },
+  perfilButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ecf0f1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  perfilButtonText: {
+    fontSize: 18,
   },
   analyticsButton: {
     backgroundColor: '#9b59b6',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
   },
   analyticsButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   profileButton: {
     backgroundColor: '#e74c3c',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
   },
   profileButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -406,7 +514,7 @@ const styles = StyleSheet.create({
     color: '#3498db',
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#7f8c8d',
     marginTop: 4,
   },
@@ -456,7 +564,7 @@ const styles = StyleSheet.create({
     color: '#2c3e50',
   },
   clienteEmail: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#7f8c8d',
   },
   statusBadge: {
@@ -473,17 +581,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   agendamentoData: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#2c3e50',
+    marginBottom: 4,
+  },
+  agendamentoServico: {
+    fontSize: 14,
+    color: '#7f8c8d',
     marginBottom: 4,
   },
   agendamentoCreated: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: '#bdc3c7',
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   actionButton: {
     flex: 1,
@@ -496,6 +609,9 @@ const styles = StyleSheet.create({
   },
   cancelarButton: {
     backgroundColor: '#e74c3c',
+  },
+  concluirButton: {
+    backgroundColor: '#9b59b6',
   },
   actionButtonText: {
     color: '#fff',
@@ -522,4 +638,3 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
 });
-

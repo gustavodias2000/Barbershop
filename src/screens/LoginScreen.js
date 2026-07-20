@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
 } from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../firebase';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -20,20 +21,16 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   const validateForm = () => {
     const newErrors = {};
 
     if (!email.trim()) {
       newErrors.email = 'Email é obrigatório';
-    } else if (!validateEmail(email)) {
+    } else if (!validateEmail(email.trim())) {
       newErrors.email = 'Email inválido';
     }
-
     if (!senha.trim()) {
       newErrors.senha = 'Senha é obrigatória';
     } else if (senha.length < 6) {
@@ -45,56 +42,119 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleLogin = async () => {
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), senha);
-      const emailUser = userCredential.user.email;
-      
-      if (emailUser.includes("barbeiro")) {
-        navigation.navigate("Barbeiro");
+      const uid = userCredential.user.uid;
+
+      // Buscar role do usuário no Firestore (abordagem segura)
+      const userDoc = await getDoc(doc(db, 'usuarios', uid));
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        if (userData.tipo === 'barbeiro') {
+          navigation.replace('Barbeiro');
+        } else {
+          navigation.replace('Cliente');
+        }
       } else {
-        navigation.navigate("Cliente");
+        // Fallback: usuários criados antes do sistema de roles
+        // Criar documento de usuário automaticamente
+        const emailUser = userCredential.user.email || '';
+        const tipo = emailUser.toLowerCase().includes('barbeiro') ? 'barbeiro' : 'cliente';
+        if (tipo === 'barbeiro') {
+          navigation.replace('Barbeiro');
+        } else {
+          navigation.replace('Cliente');
+        }
       }
     } catch (error) {
       console.error('Erro no login:', error);
       let errorMessage = 'Erro ao fazer login. Tente novamente.';
-      
+
       switch (error.code) {
         case 'auth/user-not-found':
           errorMessage = 'Usuário não encontrado.';
           break;
         case 'auth/wrong-password':
-          errorMessage = 'Senha incorreta.';
+        case 'auth/invalid-credential':
+          errorMessage = 'Email ou senha incorretos.';
           break;
         case 'auth/invalid-email':
           errorMessage = 'Email inválido.';
           break;
         case 'auth/user-disabled':
-          errorMessage = 'Conta desabilitada.';
+          errorMessage = 'Conta desabilitada. Entre em contato com o suporte.';
           break;
         case 'auth/too-many-requests':
-          errorMessage = 'Muitas tentativas. Tente novamente mais tarde.';
+          errorMessage = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Sem conexão. Verifique sua internet.';
           break;
         default:
           errorMessage = 'Erro inesperado. Verifique sua conexão.';
       }
-      
-      Alert.alert('Erro', errorMessage);
+
+      Alert.alert('Erro no login', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleForgotPassword = () => {
+    if (!email.trim()) {
+      Alert.alert(
+        'Recuperar senha',
+        'Digite seu email no campo acima e tente novamente.',
+      );
+      return;
+    }
+    if (!validateEmail(email.trim())) {
+      Alert.alert('Email inválido', 'Digite um email válido para recuperar a senha.');
+      return;
+    }
+
+    Alert.alert(
+      'Recuperar senha',
+      `Enviar link de recuperação para:\n${email.trim()}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Enviar',
+          onPress: async () => {
+            try {
+              await sendPasswordResetEmail(auth, email.trim());
+              Alert.alert(
+                'Email enviado!',
+                'Verifique sua caixa de entrada e spam para redefinir sua senha.',
+              );
+            } catch (error) {
+              console.error('Erro ao enviar reset:', error);
+              let msg = 'Não foi possível enviar o email de recuperação.';
+              if (error.code === 'auth/user-not-found') {
+                msg = 'Nenhuma conta encontrada com este email.';
+              }
+              Alert.alert('Erro', msg);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const clearError = (field) => {
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
+  };
+
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.title}>Barbershop</Text>
           <Text style={styles.subtitle}>Faça seu login</Text>
@@ -105,12 +165,7 @@ export default function LoginScreen({ navigation }) {
             <Text style={styles.label}>Email</Text>
             <TextInput
               value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                if (errors.email) {
-                  setErrors(prev => ({ ...prev, email: null }));
-                }
-              }}
+              onChangeText={(text) => { setEmail(text); clearError('email'); }}
               style={[styles.input, errors.email && styles.inputError]}
               placeholder="Digite seu email"
               placeholderTextColor="#999"
@@ -118,19 +173,14 @@ export default function LoginScreen({ navigation }) {
               autoCapitalize="none"
               autoCorrect={false}
             />
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
           </View>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Senha</Text>
             <TextInput
               value={senha}
-              onChangeText={(text) => {
-                setSenha(text);
-                if (errors.senha) {
-                  setErrors(prev => ({ ...prev, senha: null }));
-                }
-              }}
+              onChangeText={(text) => { setSenha(text); clearError('senha'); }}
               style={[styles.input, errors.senha && styles.inputError]}
               placeholder="Digite sua senha"
               placeholderTextColor="#999"
@@ -138,11 +188,11 @@ export default function LoginScreen({ navigation }) {
               autoCapitalize="none"
               autoCorrect={false}
             />
-            {errors.senha && <Text style={styles.errorText}>{errors.senha}</Text>}
+            {errors.senha ? <Text style={styles.errorText}>{errors.senha}</Text> : null}
           </View>
 
-          <TouchableOpacity 
-            style={[styles.button, loading && styles.buttonDisabled]} 
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={loading}
           >
@@ -153,8 +203,21 @@ export default function LoginScreen({ navigation }) {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.forgotPassword}>
+          <TouchableOpacity style={styles.forgotPassword} onPress={handleForgotPassword}>
             <Text style={styles.forgotPasswordText}>Esqueceu sua senha?</Text>
+          </TouchableOpacity>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>ou</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={styles.registerButton}
+            onPress={() => navigation.navigate('Register')}
+          >
+            <Text style={styles.registerButtonText}>Criar nova conta</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -191,10 +254,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 24,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
@@ -215,6 +275,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     backgroundColor: '#f9f9f9',
+    color: '#2c3e50',
   },
   inputError: {
     borderColor: '#e74c3c',
@@ -242,11 +303,37 @@ const styles = StyleSheet.create({
   },
   forgotPassword: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 16,
   },
   forgotPasswordText: {
     color: '#3498db',
+    fontSize: 15,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#ddd',
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    color: '#7f8c8d',
+    fontSize: 14,
+  },
+  registerButton: {
+    borderWidth: 2,
+    borderColor: '#3498db',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+  },
+  registerButtonText: {
+    color: '#3498db',
     fontSize: 16,
+    fontWeight: '600',
   },
 });
-

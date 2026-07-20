@@ -6,13 +6,22 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
 } from 'react-native';
 import { db, auth } from '../../firebase';
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+} from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import PaymentModal from '../components/PaymentModal';
 import CalendarService from '../services/CalendarService';
+import { getNextDays } from '../utils/dateUtils';
 
 export default function AgendamentoScreen({ route, navigation }) {
   const { barbeiro } = route.params;
@@ -20,83 +29,77 @@ export default function AgendamentoScreen({ route, navigation }) {
   const [selectedTime, setSelectedTime] = useState(null);
   const [availableTimes, setAvailableTimes] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [agendamentosExistentes, setAgendamentosExistentes] = useState([]);
+  const [loadingHorarios, setLoadingHorarios] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [createdAgendamento, setCreatedAgendamento] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
 
   // Horários disponíveis (9h às 18h)
   const horariosPadrao = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
     '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
+    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
   ];
 
-  // Gerar próximos 7 dias
-  const getNextDays = () => {
-    const days = [];
-    const today = new Date();
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
-      // Pular domingos (0 = domingo)
-      if (date.getDay() !== 0) {
-        days.push({
-          date: date.toISOString().split('T')[0],
-          display: date.toLocaleDateString('pt-BR', { 
-            weekday: 'short', 
-            day: '2-digit', 
-            month: '2-digit' 
-          })
-        });
-      }
-    }
-    return days;
-  };
+  const availableDates = getNextDays(7);
 
-  const [availableDates] = useState(getNextDays());
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
 
   useEffect(() => {
     if (selectedDate) {
-      fetchAgendamentosData();
+      fetchHorariosOcupados();
     }
   }, [selectedDate]);
 
-  const fetchAgendamentosData = async () => {
+  const fetchUserProfile = async () => {
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+      const userDoc = await getDoc(doc(db, 'usuarios', uid));
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data());
+      }
+    } catch (error) {
+      console.error('Erro ao buscar perfil:', error);
+    }
+  };
+
+  const fetchHorariosOcupados = async () => {
+    setLoadingHorarios(true);
     try {
       const q = query(
         collection(db, 'agendamentos'),
         where('barbeiroId', '==', barbeiro.id),
         where('data', '==', selectedDate),
-        where('status', 'in', ['pendente', 'confirmado'])
+        where('status', 'in', ['pendente', 'confirmado']),
       );
-      
+
       const querySnapshot = await getDocs(q);
-      const agendamentos = querySnapshot.docs.map(doc => doc.data());
-      
-      setAgendamentosExistentes(agendamentos);
-      
-      // Filtrar horários disponíveis
-      const horariosOcupados = agendamentos.map(ag => ag.horario);
+      const agendamentos = querySnapshot.docs.map((d) => d.data());
+      const horariosOcupados = agendamentos.map((ag) => ag.horario);
       const horariosDisponiveis = horariosPadrao.filter(
-        horario => !horariosOcupados.includes(horario)
+        (h) => !horariosOcupados.includes(h),
       );
-      
+
       setAvailableTimes(horariosDisponiveis);
+      setSelectedTime(null); // Resetar horário ao trocar de data
     } catch (error) {
-      console.error('Erro ao buscar agendamentos:', error);
+      console.error('Erro ao buscar horários:', error);
+      setAvailableTimes(horariosPadrao); // Fallback: mostrar todos
+    } finally {
+      setLoadingHorarios(false);
     }
   };
 
   const confirmarAgendamento = async () => {
     if (!selectedDate || !selectedTime) {
-      Alert.alert('Erro', 'Selecione uma data e horário.');
+      Alert.alert('Atenção', 'Selecione uma data e um horário.');
       return;
     }
 
     setLoading(true);
-    
     try {
       const userEmail = auth.currentUser?.email;
       if (!userEmail) {
@@ -104,29 +107,34 @@ export default function AgendamentoScreen({ route, navigation }) {
         return;
       }
 
+      const clienteNome = userProfile?.nome || userEmail.split('@')[0];
+      const clienteTelefone = userProfile?.telefone || '';
+      const barbeiroTelefone = barbeiro.telefone || '';
+
       const novoAgendamento = {
         barbeiroId: barbeiro.id,
         barbeiroNome: barbeiro.nome,
-        barbeiroTelefone: barbeiro.telefone || '5511999999999',
+        barbeiroTelefone,
         cliente: userEmail,
-        clienteNome: userEmail.split('@')[0],
+        clienteUid: auth.currentUser?.uid || '',
+        clienteNome,
+        clienteTelefone,
         status: 'pendente',
         createdAt: new Date(),
         data: selectedDate,
         horario: selectedTime,
         servico: barbeiro.especialidade || 'Corte e barba',
-        preco: barbeiro.preco || '25,00'
+        preco: barbeiro.preco || '25,00',
       };
 
       // Salvar no Firestore
       await addDoc(collection(db, 'agendamentos'), novoAgendamento);
-      
+
       setCreatedAgendamento(novoAgendamento);
       setShowPaymentModal(true);
-      
     } catch (error) {
       console.error('Erro ao agendar:', error);
-      Alert.alert('Erro', 'Não foi possível realizar o agendamento.');
+      Alert.alert('Erro', 'Não foi possível realizar o agendamento. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -134,70 +142,64 @@ export default function AgendamentoScreen({ route, navigation }) {
 
   const handlePaymentSuccess = async (paymentResult) => {
     try {
-      // Enviar mensagem via WhatsApp
+      if (!createdAgendamento) return;
+
       const clienteInfo = {
         nome: createdAgendamento.clienteNome,
-        email: auth.currentUser?.email
+        email: auth.currentUser?.email,
       };
 
       const mensagem = WhatsAppService.gerarMensagemAgendamento(
         { ...barbeiro, telefone: createdAgendamento.barbeiroTelefone },
         clienteInfo,
         createdAgendamento.data,
-        createdAgendamento.horario
+        createdAgendamento.horario,
       );
 
-      const whatsappEnviado = await WhatsAppService.sendTextMessage(
-        createdAgendamento.barbeiroTelefone,
-        mensagem
-      );
+      const barbeiroPhone = createdAgendamento.barbeiroTelefone;
+      const whatsappEnviado = barbeiroPhone
+        ? await WhatsAppService.sendTextMessage(barbeiroPhone, mensagem)
+        : false;
 
-      if (whatsappEnviado) {
-        Alert.alert(
-          'Sucesso!', 
-          `Agendamento pago e confirmado! Mensagem enviada via WhatsApp.`,
-          [
-            { text: 'OK', onPress: () => navigation.goBack() },
-            { 
-              text: 'Adicionar ao Calendário', 
-              onPress: async () => {
-                await CalendarService.addAgendamentoToCalendar(novoAgendamento);
-                navigation.goBack();
-              }
-            }
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Agendamento Pago', 
-          `Agendamento pago com sucesso! Entre em contato para confirmar.`,
-          [
-            { text: 'OK', onPress: () => navigation.goBack() },
-            { 
-              text: 'Adicionar ao Calendário', 
-              onPress: async () => {
-                await CalendarService.addAgendamentoToCalendar(novoAgendamento);
-                navigation.goBack();
-              }
-            }
-          ]
-        );
-      }
+      // CORRIGIDO: usa `createdAgendamento` (state) em vez de `novoAgendamento` (indefinido)
+      const agendamentoParaCalendario = createdAgendamento;
+
+      Alert.alert(
+        whatsappEnviado ? 'Sucesso!' : 'Agendamento Pago',
+        whatsappEnviado
+          ? 'Agendamento pago e confirmado! Mensagem enviada via WhatsApp.'
+          : 'Agendamento pago com sucesso! Entre em contato para confirmar.',
+        [
+          { text: 'OK', onPress: () => navigation.goBack() },
+          {
+            text: 'Adicionar ao Calendário',
+            onPress: async () => {
+              await CalendarService.addAgendamentoToCalendar(agendamentoParaCalendario);
+              navigation.goBack();
+            },
+          },
+        ],
+      );
     } catch (error) {
       console.error('Erro pós-pagamento:', error);
-      Alert.alert('Pagamento realizado', 'Agendamento pago, mas houve erro no envio da mensagem.');
+      Alert.alert(
+        'Pagamento realizado',
+        'Agendamento pago, mas houve um erro ao enviar a mensagem.',
+      );
       navigation.goBack();
     }
   };
 
   return (
     <ScrollView style={styles.container}>
+      {/* Cabeçalho do barbeiro */}
       <View style={styles.header}>
         <Text style={styles.title}>Agendar com {barbeiro.nome}</Text>
         <Text style={styles.subtitle}>{barbeiro.especialidade || 'Corte e barba'}</Text>
         <Text style={styles.price}>R$ {barbeiro.preco || '25,00'}</Text>
       </View>
 
+      {/* Seleção de data */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Selecione a Data</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateScroll}>
@@ -206,14 +208,16 @@ export default function AgendamentoScreen({ route, navigation }) {
               key={index}
               style={[
                 styles.dateButton,
-                selectedDate === day.date && styles.selectedDateButton
+                selectedDate === day.date && styles.selectedDateButton,
               ]}
               onPress={() => setSelectedDate(day.date)}
             >
-              <Text style={[
-                styles.dateButtonText,
-                selectedDate === day.date && styles.selectedDateButtonText
-              ]}>
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  selectedDate === day.date && styles.selectedDateButtonText,
+                ]}
+              >
                 {day.display}
               </Text>
             </TouchableOpacity>
@@ -221,24 +225,33 @@ export default function AgendamentoScreen({ route, navigation }) {
         </ScrollView>
       </View>
 
-      {selectedDate && (
+      {/* Seleção de horário */}
+      {selectedDate ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Selecione o Horário</Text>
-          {availableTimes.length > 0 ? (
+
+          {loadingHorarios ? (
+            <View style={styles.loadingHorarios}>
+              <ActivityIndicator color="#3498db" />
+              <Text style={styles.loadingHorariosText}>Verificando disponibilidade...</Text>
+            </View>
+          ) : availableTimes.length > 0 ? (
             <View style={styles.timeGrid}>
               {availableTimes.map((time, index) => (
                 <TouchableOpacity
                   key={index}
                   style={[
                     styles.timeButton,
-                    selectedTime === time && styles.selectedTimeButton
+                    selectedTime === time && styles.selectedTimeButton,
                   ]}
                   onPress={() => setSelectedTime(time)}
                 >
-                  <Text style={[
-                    styles.timeButtonText,
-                    selectedTime === time && styles.selectedTimeButtonText
-                  ]}>
+                  <Text
+                    style={[
+                      styles.timeButtonText,
+                      selectedTime === time && styles.selectedTimeButtonText,
+                    ]}
+                  >
                     {time}
                   </Text>
                 </TouchableOpacity>
@@ -247,13 +260,14 @@ export default function AgendamentoScreen({ route, navigation }) {
           ) : (
             <View style={styles.noTimesContainer}>
               <Text style={styles.noTimesText}>
-                Não há horários disponíveis para esta data
+                Não há horários disponíveis para esta data. Escolha outro dia.
               </Text>
             </View>
           )}
         </View>
-      )}
+      ) : null}
 
+      {/* Modal de pagamento */}
       <PaymentModal
         visible={showPaymentModal}
         onClose={() => {
@@ -265,17 +279,35 @@ export default function AgendamentoScreen({ route, navigation }) {
         onPaymentSuccess={handlePaymentSuccess}
       />
 
-      {selectedDate && selectedTime && (
+      {/* Resumo e botão confirmar */}
+      {selectedDate && selectedTime ? (
         <View style={styles.confirmSection}>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Resumo do Agendamento</Text>
-            <Text style={styles.summaryText}>Barbeiro: {barbeiro.nome}</Text>
-            <Text style={styles.summaryText}>Data: {selectedDate}</Text>
-            <Text style={styles.summaryText}>Horário: {selectedTime}</Text>
-            <Text style={styles.summaryText}>Serviço: {barbeiro.especialidade || 'Corte e barba'}</Text>
-            <Text style={styles.summaryPrice}>Valor: R$ {barbeiro.preco || '25,00'}</Text>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Barbeiro:</Text>
+              <Text style={styles.summaryValue}>{barbeiro.nome}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Data:</Text>
+              <Text style={styles.summaryValue}>{selectedDate}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Horário:</Text>
+              <Text style={styles.summaryValue}>{selectedTime}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Serviço:</Text>
+              <Text style={styles.summaryValue}>
+                {barbeiro.especialidade || 'Corte e barba'}
+              </Text>
+            </View>
+            <View style={[styles.summaryRow, styles.summaryTotal]}>
+              <Text style={styles.summaryTotalLabel}>Total:</Text>
+              <Text style={styles.summaryPrice}>R$ {barbeiro.preco || '25,00'}</Text>
+            </View>
           </View>
-          
+
           <TouchableOpacity
             style={[styles.confirmButton, loading && styles.confirmButtonDisabled]}
             onPress={confirmarAgendamento}
@@ -288,7 +320,7 @@ export default function AgendamentoScreen({ route, navigation }) {
             )}
           </TouchableOpacity>
         </View>
-      )}
+      ) : null}
     </ScrollView>
   );
 }
@@ -306,10 +338,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#2c3e50',
     marginBottom: 4,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
@@ -328,7 +361,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#2c3e50',
     marginBottom: 12,
@@ -350,13 +383,23 @@ const styles = StyleSheet.create({
     borderColor: '#3498db',
   },
   dateButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#495057',
     textAlign: 'center',
   },
   selectedDateButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  loadingHorarios: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 12,
+  },
+  loadingHorariosText: {
+    color: '#7f8c8d',
+    fontSize: 14,
   },
   timeGrid: {
     flexDirection: 'row',
@@ -390,12 +433,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   noTimesText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#7f8c8d',
     textAlign: 'center',
   },
   confirmSection: {
     margin: 16,
+    marginBottom: 32,
   },
   summaryCard: {
     backgroundColor: '#fff',
@@ -404,21 +448,43 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   summaryTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#2c3e50',
     marginBottom: 12,
   },
-  summaryText: {
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  summaryLabel: {
+    fontSize: 15,
+    color: '#7f8c8d',
+  },
+  summaryValue: {
+    fontSize: 15,
+    color: '#2c3e50',
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 8,
+  },
+  summaryTotal: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  summaryTotalLabel: {
     fontSize: 16,
-    color: '#495057',
-    marginBottom: 4,
+    fontWeight: 'bold',
+    color: '#2c3e50',
   },
   summaryPrice: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#27ae60',
-    marginTop: 8,
   },
   confirmButton: {
     backgroundColor: '#27ae60',
@@ -431,8 +497,7 @@ const styles = StyleSheet.create({
   },
   confirmButtonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
   },
 });
-

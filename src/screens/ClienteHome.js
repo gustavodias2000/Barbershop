@@ -1,17 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
   StyleSheet,
   Alert,
   ActivityIndicator,
   RefreshControl,
-  Image
 } from 'react-native';
 import { db, auth } from '../../firebase';
-import { collection, getDocs, addDoc, query, where, orderBy } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  doc,
+  getDoc,
+} from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import NotificationService from '../services/NotificationService';
 
@@ -20,16 +27,17 @@ export default function ClienteHome({ navigation }) {
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
-    fetchData();
-    // Configurar notificações
+    fetchAll();
+    // Configurar notificações push
     NotificationService.getFCMToken();
   }, []);
 
-  const fetchData = async () => {
+  const fetchAll = async () => {
     try {
-      await Promise.all([fetchBarbeiros(), fetchAgendamentos()]);
+      await Promise.all([fetchUserProfile(), fetchBarbeiros(), fetchAgendamentos()]);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       Alert.alert('Erro', 'Não foi possível carregar os dados.');
@@ -38,13 +46,23 @@ export default function ClienteHome({ navigation }) {
     }
   };
 
+  const fetchUserProfile = async () => {
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+      const userDoc = await getDoc(doc(db, 'usuarios', uid));
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data());
+      }
+    } catch (error) {
+      console.error('Erro ao buscar perfil:', error);
+    }
+  };
+
   const fetchBarbeiros = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, 'barbeiros'));
-      const data = querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
+      const data = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       setBarbeiros(data);
     } catch (error) {
       console.error('Erro ao buscar barbeiros:', error);
@@ -59,14 +77,11 @@ export default function ClienteHome({ navigation }) {
       const q = query(
         collection(db, 'agendamentos'),
         where('cliente', '==', userEmail),
-        orderBy('createdAt', 'desc')
+        orderBy('createdAt', 'desc'),
       );
-      
+
       const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
+      const data = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       setAgendamentos(data);
     } catch (error) {
       console.error('Erro ao buscar agendamentos:', error);
@@ -75,84 +90,30 @@ export default function ClienteHome({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchData();
-    setRefreshing(false);
+    try {
+      await Promise.all([fetchUserProfile(), fetchBarbeiros(), fetchAgendamentos()]);
+    } catch (error) {
+      console.error('Erro ao atualizar:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
-  const agendar = async (barbeiro) => {
-    try {
-      const userEmail = auth.currentUser?.email;
-      if (!userEmail) {
-        Alert.alert('Erro', 'Usuário não autenticado.');
-        return;
-      }
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'confirmado': return '#27ae60';
+      case 'cancelado': return '#e74c3c';
+      case 'concluido': return '#8e44ad';
+      default: return '#f39c12';
+    }
+  };
 
-      // Verificar se já existe agendamento pendente com este barbeiro
-      const agendamentoPendente = agendamentos.find(
-        ag => ag.barbeiroId === barbeiro.id && ag.status === 'pendente'
-      );
-
-      if (agendamentoPendente) {
-        Alert.alert(
-          'Agendamento Existente',
-          'Você já possui um agendamento pendente com este barbeiro.'
-        );
-        return;
-      }
-
-      const dataAgendamento = new Date().toISOString().split('T')[0]; // Data atual como placeholder
-      const horarioAgendamento = '14:00'; // Horário padrão como placeholder
-
-      const novoAgendamento = {
-        barbeiroId: barbeiro.id,
-        barbeiroNome: barbeiro.nome,
-        barbeiroTelefone: barbeiro.telefone || '5511999999999', // Telefone do barbeiro
-        cliente: userEmail,
-        clienteNome: userEmail.split('@')[0], // Usar parte do email como nome temporário
-        status: 'pendente',
-        createdAt: new Date(),
-        data: dataAgendamento,
-        horario: horarioAgendamento
-      };
-
-      // Salvar no Firestore
-      await addDoc(collection(db, 'agendamentos'), novoAgendamento);
-      
-      // Enviar mensagem via WhatsApp
-      const clienteInfo = {
-        nome: novoAgendamento.clienteNome,
-        email: userEmail
-      };
-
-      const mensagem = WhatsAppService.gerarMensagemAgendamento(
-        barbeiro,
-        clienteInfo,
-        dataAgendamento,
-        horarioAgendamento
-      );
-
-      const whatsappEnviado = await WhatsAppService.sendTextMessage(
-        barbeiro.telefone || '5511999999999',
-        mensagem
-      );
-
-      if (whatsappEnviado) {
-        Alert.alert(
-          'Sucesso!', 
-          `Agendamento solicitado com ${barbeiro.nome}. Mensagem enviada via WhatsApp!`
-        );
-      } else {
-        Alert.alert(
-          'Agendamento Criado', 
-          `Agendamento solicitado com ${barbeiro.nome}. Entre em contato para confirmar.`
-        );
-      }
-      
-      // Atualizar lista de agendamentos
-      await fetchAgendamentos();
-    } catch (error) {
-      console.error('Erro ao agendar:', error);
-      Alert.alert('Erro', 'Não foi possível realizar o agendamento.');
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'confirmado': return 'Confirmado';
+      case 'cancelado': return 'Cancelado';
+      case 'concluido': return 'Concluído';
+      default: return 'Pendente';
     }
   };
 
@@ -169,16 +130,15 @@ export default function ClienteHome({ navigation }) {
           <Text style={styles.barbeiroEspecialidade}>
             {item.especialidade || 'Corte e barba'}
           </Text>
-          <Text style={styles.barbeiroPreco}>
-            R$ {item.preco || '25,00'}
-          </Text>
+          <Text style={styles.barbeiroPreco}>R$ {item.preco || '25,00'}</Text>
         </View>
-          <TouchableOpacity 
-          style={styles.agendarButton} 
-          onPress={() => navigation.navigate('Agendamento', { barbeiro: item })}
-        >
-          <Text style={styles.agendarButtonText}>Agendar</Text>
-        </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        style={styles.agendarButton}
+        onPress={() => navigation.navigate('Agendamento', { barbeiro: item })}
+      >
+        <Text style={styles.agendarButtonText}>Agendar</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -186,10 +146,7 @@ export default function ClienteHome({ navigation }) {
     <View style={styles.agendamentoCard}>
       <View style={styles.agendamentoHeader}>
         <Text style={styles.agendamentoBarbeiro}>{item.barbeiroNome}</Text>
-        <View style={[
-          styles.statusBadge, 
-          { backgroundColor: getStatusColor(item.status) }
-        ]}>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
         </View>
       </View>
@@ -198,22 +155,6 @@ export default function ClienteHome({ navigation }) {
       </Text>
     </View>
   );
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'confirmado': return '#27ae60';
-      case 'cancelado': return '#e74c3c';
-      default: return '#f39c12';
-    }
-  };
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'confirmado': return 'Confirmado';
-      case 'cancelado': return 'Cancelado';
-      default: return 'Pendente';
-    }
-  };
 
   if (loading) {
     return (
@@ -224,20 +165,45 @@ export default function ClienteHome({ navigation }) {
     );
   }
 
+  const nomeExibido = userProfile?.nome
+    ? userProfile.nome.split(' ')[0]
+    : auth.currentUser?.email?.split('@')[0] || 'Cliente';
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Barbeiros Disponíveis</Text>
+        <View>
+          <Text style={styles.greeting}>Olá, {nomeExibido}!</Text>
+          <Text style={styles.title}>Barbeiros Disponíveis</Text>
+        </View>
         <View style={styles.headerButtons}>
-          <TouchableOpacity 
+          <TouchableOpacity
+            style={styles.perfilButton}
+            onPress={() => navigation.navigate('Perfil')}
+          >
+            <Text style={styles.perfilButtonText}>👤</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.historicoButton}
             onPress={() => navigation.navigate('Historico')}
           >
             <Text style={styles.historicoButtonText}>Histórico</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => auth.signOut()}
+            onPress={() =>
+              Alert.alert('Sair', 'Deseja realmente sair?', [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Sair',
+                  style: 'destructive',
+                  onPress: async () => {
+                    await auth.signOut();
+                    navigation.replace('Login');
+                  },
+                },
+              ])
+            }
           >
             <Text style={styles.profileButtonText}>Sair</Text>
           </TouchableOpacity>
@@ -246,7 +212,7 @@ export default function ClienteHome({ navigation }) {
 
       <FlatList
         data={barbeiros}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         renderItem={renderBarbeiro}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -254,24 +220,29 @@ export default function ClienteHome({ navigation }) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>Nenhum barbeiro disponível</Text>
+            <Text style={styles.emptySubtext}>Novos barbeiros serão exibidos aqui</Text>
           </View>
         }
         ListHeaderComponent={
-          agendamentos.length > 0 && (
+          agendamentos.length > 0 ? (
             <View style={styles.agendamentosSection}>
               <Text style={styles.sectionTitle}>Meus Agendamentos</Text>
-              {agendamentos.slice(0, 3).map(item => (
-                <View key={item.id}>
-                  {renderAgendamento({ item })}
-                </View>
+              {agendamentos.slice(0, 3).map((item) => (
+                <View key={item.id}>{renderAgendamento({ item })}</View>
               ))}
               {agendamentos.length > 3 && (
-                <TouchableOpacity style={styles.verMaisButton}>
-                  <Text style={styles.verMaisText}>Ver todos</Text>
+                // CORRIGIDO: botão "Ver todos" agora navega para Historico
+                <TouchableOpacity
+                  style={styles.verMaisButton}
+                  onPress={() => navigation.navigate('Historico')}
+                >
+                  <Text style={styles.verMaisText}>
+                    Ver todos ({agendamentos.length})
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
-          )
+          ) : null
         }
       />
     </View>
@@ -298,42 +269,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
+  greeting: {
+    fontSize: 14,
+    color: '#7f8c8d',
+  },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#2c3e50',
-    flex: 1,
   },
   headerButtons: {
     flexDirection: 'row',
     gap: 8,
+    alignItems: 'center',
+  },
+  perfilButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ecf0f1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  perfilButtonText: {
+    fontSize: 18,
   },
   historicoButton: {
     backgroundColor: '#3498db',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
   },
   historicoButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   profileButton: {
     backgroundColor: '#e74c3c',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
   },
   profileButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   agendamentosSection: {
     backgroundColor: '#fff',
@@ -348,6 +334,7 @@ const styles = StyleSheet.create({
     color: '#2c3e50',
     marginBottom: 12,
   },
+  // CORRIGIDO: barbeiroCard agora tem estrutura correta (View fechada)
   barbeiroCard: {
     backgroundColor: '#fff',
     marginHorizontal: 16,
@@ -426,6 +413,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#2c3e50',
+    flex: 1,
+    marginRight: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -444,6 +433,7 @@ const styles = StyleSheet.create({
   verMaisButton: {
     alignItems: 'center',
     marginTop: 8,
+    paddingVertical: 8,
   },
   verMaisText: {
     color: '#3498db',
@@ -459,6 +449,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#7f8c8d',
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#bdc3c7',
+    textAlign: 'center',
   },
 });
-

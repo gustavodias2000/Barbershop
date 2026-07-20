@@ -1,7 +1,9 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getMessaging } from "firebase/messaging";
+
+// NOTA: Não use getMessaging do Web SDK em React Native.
+// Para push notifications, use @react-native-firebase/messaging (veja NotificationService.js).
 
 const firebaseConfig = {
   apiKey: "AIzaSyA4phVWJPifqkoUhlo_oJbCiJ9A0FtS2Bo",
@@ -15,5 +17,4 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const messaging = getMessaging(app);
 

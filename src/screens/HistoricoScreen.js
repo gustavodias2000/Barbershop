@@ -7,18 +7,28 @@ import {
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
-  Alert
+  Alert,
+  ScrollView,  // CORRIGIDO: ScrollView estava faltando no import
 } from 'react-native';
 import { db, auth } from '../../firebase';
-import { collection, query, where, orderBy, getDocs, updateDoc, doc } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  updateDoc,
+  doc,
+} from 'firebase/firestore';
 import WhatsAppService from '../services/WhatsAppService';
 import RatingComponent from '../components/RatingComponent';
+import { formatDate, formatDateTime } from '../utils/dateUtils';
 
 export default function HistoricoScreen({ navigation }) {
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filtro, setFiltro] = useState('todos'); // todos, pendentes, confirmados, cancelados
+  const [filtro, setFiltro] = useState('todos');
   const [showRating, setShowRating] = useState(false);
   const [selectedAgendamento, setSelectedAgendamento] = useState(null);
 
@@ -31,25 +41,26 @@ export default function HistoricoScreen({ navigation }) {
       const userEmail = auth.currentUser?.email;
       if (!userEmail) return;
 
-      let q = query(
-        collection(db, 'agendamentos'),
-        where('cliente', '==', userEmail),
-        orderBy('createdAt', 'desc')
-      );
-
-      if (filtro !== 'todos') {
+      let q;
+      if (filtro === 'todos') {
+        q = query(
+          collection(db, 'agendamentos'),
+          where('cliente', '==', userEmail),
+          orderBy('createdAt', 'desc'),
+        );
+      } else {
         q = query(
           collection(db, 'agendamentos'),
           where('cliente', '==', userEmail),
           where('status', '==', filtro),
-          orderBy('createdAt', 'desc')
+          orderBy('createdAt', 'desc'),
         );
       }
 
       const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      const data = querySnapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
       }));
 
       setAgendamentos(data);
@@ -63,8 +74,14 @@ export default function HistoricoScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchAgendamentos();
-    setRefreshing(false);
+    try {
+      await fetchAgendamentos();
+    } catch (error) {
+      console.error('Erro ao atualizar:', error);
+    } finally {
+      // CORRIGIDO: refreshing agora sempre reseta, mesmo em caso de erro
+      setRefreshing(false);
+    }
   };
 
   const cancelarAgendamento = async (agendamento) => {
@@ -82,23 +99,15 @@ export default function HistoricoScreen({ navigation }) {
               await updateDoc(ref, {
                 status: 'cancelado',
                 cancelledAt: new Date(),
-                cancelledBy: 'cliente'
+                cancelledBy: 'cliente',
               });
 
-              // Enviar notificação para o barbeiro
-              const mensagem = `Olá ${agendamento.barbeiroNome}! 
-
-O cliente ${agendamento.clienteNome} cancelou o agendamento:
-
-📅 Data: ${agendamento.data}
-🕐 Horário: ${agendamento.horario}
-
-Horário liberado para outros clientes.`;
-
-              await WhatsAppService.sendTextMessage(
-                agendamento.barbeiroTelefone || '5511999999999',
-                mensagem
-              );
+              // Notificar barbeiro via WhatsApp se tiver telefone
+              const barbeiroPhone = agendamento.barbeiroTelefone;
+              if (barbeiroPhone) {
+                const mensagem = `Olá ${agendamento.barbeiroNome}!\n\nO cliente ${agendamento.clienteNome} cancelou o agendamento:\n\n📅 Data: ${agendamento.data}\n🕐 Horário: ${agendamento.horario}\n\nHorário liberado para outros clientes.`;
+                await WhatsAppService.sendTextMessage(barbeiroPhone, mensagem);
+              }
 
               Alert.alert('Sucesso', 'Agendamento cancelado com sucesso.');
               await fetchAgendamentos();
@@ -106,22 +115,20 @@ Horário liberado para outros clientes.`;
               console.error('Erro ao cancelar:', error);
               Alert.alert('Erro', 'Não foi possível cancelar o agendamento.');
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
   const reagendar = (agendamento) => {
-    // Navegar para tela de agendamento com dados do barbeiro
     const barbeiro = {
       id: agendamento.barbeiroId,
       nome: agendamento.barbeiroNome,
       telefone: agendamento.barbeiroTelefone,
       especialidade: agendamento.servico,
-      preco: agendamento.preco
+      preco: agendamento.preco,
     };
-
     navigation.navigate('Agendamento', { barbeiro });
   };
 
@@ -130,6 +137,7 @@ Horário liberado para outros clientes.`;
       case 'confirmado': return '#27ae60';
       case 'cancelado': return '#e74c3c';
       case 'concluido': return '#8e44ad';
+      case 'avaliado': return '#2980b9';
       default: return '#f39c12';
     }
   };
@@ -139,18 +147,8 @@ Horário liberado para outros clientes.`;
       case 'confirmado': return 'Confirmado';
       case 'cancelado': return 'Cancelado';
       case 'concluido': return 'Concluído';
+      case 'avaliado': return 'Avaliado';
       default: return 'Pendente';
-    }
-  };
-
-  const formatDate = (date) => {
-    if (!date) return 'Data não disponível';
-    
-    try {
-      const dateObj = date.toDate ? date.toDate() : new Date(date);
-      return dateObj.toLocaleDateString('pt-BR');
-    } catch (error) {
-      return 'Data inválida';
     }
   };
 
@@ -172,7 +170,7 @@ Horário liberado para outros clientes.`;
         </Text>
         <Text style={styles.preco}>💰 R$ {item.preco || '25,00'}</Text>
         <Text style={styles.criadoEm}>
-          Criado em: {formatDate(item.createdAt)}
+          Criado em: {formatDateTime(item.createdAt)}
         </Text>
       </View>
 
@@ -209,6 +207,12 @@ Horário liberado para outros clientes.`;
           >
             <Text style={styles.actionButtonText}>Avaliar</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.cancelButton]}
+            onPress={() => cancelarAgendamento(item)}
+          >
+            <Text style={styles.actionButtonText}>Cancelar</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -221,20 +225,23 @@ Horário liberado para outros clientes.`;
           { key: 'todos', label: 'Todos' },
           { key: 'pendente', label: 'Pendentes' },
           { key: 'confirmado', label: 'Confirmados' },
-          { key: 'cancelado', label: 'Cancelados' }
+          { key: 'concluido', label: 'Concluídos' },
+          { key: 'cancelado', label: 'Cancelados' },
         ].map((item) => (
           <TouchableOpacity
             key={item.key}
-            style={[
-              styles.filtroButton,
-              filtro === item.key && styles.filtroButtonActive
-            ]}
-            onPress={() => setFiltro(item.key)}
+            style={[styles.filtroButton, filtro === item.key && styles.filtroButtonActive]}
+            onPress={() => {
+              setLoading(true);
+              setFiltro(item.key);
+            }}
           >
-            <Text style={[
-              styles.filtroButtonText,
-              filtro === item.key && styles.filtroButtonTextActive
-            ]}>
+            <Text
+              style={[
+                styles.filtroButtonText,
+                filtro === item.key && styles.filtroButtonTextActive,
+              ]}
+            >
               {item.label}
             </Text>
           </TouchableOpacity>
@@ -262,7 +269,7 @@ Horário liberado para outros clientes.`;
 
       <FlatList
         data={agendamentos}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         renderItem={renderAgendamento}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -270,10 +277,9 @@ Horário liberado para outros clientes.`;
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              {filtro === 'todos' 
+              {filtro === 'todos'
                 ? 'Nenhum agendamento encontrado'
-                : `Nenhum agendamento ${filtro} encontrado`
-              }
+                : `Nenhum agendamento ${getStatusText(filtro).toLowerCase()} encontrado`}
             </Text>
             <Text style={styles.emptySubtext}>
               Seus agendamentos aparecerão aqui
@@ -288,7 +294,7 @@ Horário liberado para outros clientes.`;
         onClose={() => {
           setShowRating(false);
           setSelectedAgendamento(null);
-          fetchAgendamentos(); // Refresh para mostrar status atualizado
+          fetchAgendamentos();
         }}
         agendamento={selectedAgendamento}
       />
@@ -319,7 +325,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#2c3e50',
   },
@@ -371,9 +377,10 @@ const styles = StyleSheet.create({
   },
   barbeiroInfo: {
     flex: 1,
+    marginRight: 8,
   },
   barbeiroNome: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#2c3e50',
   },
@@ -396,12 +403,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   dataHorario: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#2c3e50',
     marginBottom: 4,
   },
   preco: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#27ae60',
     marginBottom: 4,
@@ -443,7 +450,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 17,
     color: '#7f8c8d',
     marginBottom: 8,
   },
@@ -453,4 +460,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-
