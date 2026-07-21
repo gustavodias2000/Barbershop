@@ -282,12 +282,18 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
         ) : null}
 
         {/* Modal de pagamento */}
+        {/*
+          onClose só fecha o modal — NÃO navega.
+          Se o usuário cancelou, volta para AgendamentoScreen normalmente.
+          Se pagou, handlePaymentSuccess cuida da navegação após os Alerts.
+          Ter dois navigation.goBack() em sequência (aqui + handlePaymentSuccess)
+          era o bug que levava o usuário de volta à tela de Login.
+        */}
         <PaymentModal
           visible={showPaymentModal}
           onClose={() => {
             setShowPaymentModal(false);
             setCreatedAgendamento(null);
-            navigation.goBack();
           }}
           agendamento={createdAgendamento}
           onPaymentSuccess={handlePaymentSuccess}

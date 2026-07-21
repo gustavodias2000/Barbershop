@@ -2,6 +2,24 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      Android 11+ exige que o app declare explicitamente quais outros apps
+      ele pode consultar via Linking.canOpenURL().
+      Sem isso, canOpenURL('whatsapp://...') retorna false mesmo com o
+      WhatsApp instalado.
+    -->
+    <queries>
+        <!-- WhatsApp (versão padrão) -->
+        <package android:name="com.whatsapp" />
+        <!-- WhatsApp Business -->
+        <package android:name="com.whatsapp.w4b" />
+        <!-- Permite abrir links https:// (Google Calendar, etc.) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"

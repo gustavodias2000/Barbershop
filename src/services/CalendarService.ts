@@ -1,11 +1,13 @@
 /**
  * CalendarService — adiciona agendamentos ao calendário do usuário.
  *
- * CORREÇÃO (migração TS): a versão anterior importava
- * `react-native-calendar-events`, que NÃO estava instalado no projeto —
- * o TypeScript flagrou a dependência fantasma. Esta versão usa o link
- * universal do Google Agenda via Linking: zero dependências nativas,
- * funciona em qualquer aparelho com o app ou navegador.
+ * Usa o link universal do Google Agenda via Linking: zero dependências nativas,
+ * funciona em qualquer aparelho com o app ou navegador instalado.
+ *
+ * NOTA: Linking.canOpenURL() para URLs https:// requer a declaração
+ * <queries> no AndroidManifest (já presente). Para evitar falso-negativo
+ * em dispositivos sem o Google Calendar mas com um navegador, abrimos
+ * diretamente via openURL e tratamos qualquer falha no catch.
  */
 import { Alert, Linking } from 'react-native';
 import type { Agendamento } from '../types';
@@ -40,31 +42,39 @@ class CalendarService {
         Alert.alert('Erro', 'Data do agendamento inválida.');
         return false;
       }
-      const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hora
+      const end = new Date(start.getTime() + 60 * 60 * 1000); // +1 hora
 
       const params = new URLSearchParams({
         action: 'TEMPLATE',
         text: `Barbershop - ${agendamento.barbeiroNome}`,
-        dates: `${toGCalDate(start)}/${toGCalDate(end)}`,
+        // Google Calendar aceita / literal na query string — não use URLSearchParams
+        // para o campo "dates" pois ele codifica a barra e o GCal não reconhece.
         details: `Agendamento com ${agendamento.barbeiroNome}\nServiço: ${
           agendamento.servico || 'Corte e barba'
         }`,
         location: 'Barbershop',
       });
 
-      const url = `https://calendar.google.com/calendar/render?${params.toString()}`;
+      // Monta o campo "dates" manualmente para preservar a barra não codificada
+      const url =
+        `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+        `&text=${encodeURIComponent(`Barbershop - ${agendamento.barbeiroNome}`)}` +
+        `&dates=${toGCalDate(start)}/${toGCalDate(end)}` +
+        `&details=${encodeURIComponent(
+          `Agendamento com ${agendamento.barbeiroNome}\nServiço: ${agendamento.servico || 'Corte e barba'}`,
+        )}` +
+        `&location=${encodeURIComponent('Barbershop')}`;
 
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        Alert.alert('Erro', 'Não foi possível abrir o calendário.');
-        return false;
-      }
-
+      // Abre diretamente sem canOpenURL: em Android o sistema sempre consegue
+      // abrir URLs https:// via browser ou app nativo.
       await Linking.openURL(url);
       return true;
     } catch (error) {
       console.error('Erro ao adicionar ao calendário:', error);
-      Alert.alert('Erro', 'Não foi possível adicionar o agendamento ao calendário.');
+      Alert.alert(
+        'Não foi possível abrir o calendário',
+        'Verifique se você tem um navegador instalado e tente novamente.',
+      );
       return false;
     }
   }

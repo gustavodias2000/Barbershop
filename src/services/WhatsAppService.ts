@@ -51,27 +51,34 @@ class WhatsAppService {
 
   /**
    * Fallback: abre o WhatsApp instalado no aparelho com a mensagem pronta.
+   *
+   * NOTA: Linking.canOpenURL('whatsapp://...') retorna false no Android 11+
+   * sem a declaração <queries> no AndroidManifest (já adicionada).
+   * Mesmo assim preferimos abrir diretamente via openURL e capturar o erro:
+   * é mais robusto e evita falso-negativo em alguns dispositivos.
    */
   async fallbackToDirectLink(phone: string, message: string): Promise<boolean> {
     try {
       const fullPhone = this.formatPhoneNumber(phone);
       const url = `whatsapp://send?phone=${fullPhone}&text=${encodeURIComponent(message)}`;
 
-      const supported = await Linking.canOpenURL(url);
-
-      if (supported) {
-        await Linking.openURL(url);
-        return true;
-      }
-      Alert.alert(
-        'WhatsApp não encontrado',
-        'Por favor, instale o WhatsApp para enviar mensagens.',
-      );
-      return false;
+      await Linking.openURL(url);
+      return true;
     } catch (error) {
       console.error('Erro no fallback WhatsApp:', error);
-      Alert.alert('Erro', 'Não foi possível enviar a mensagem.');
-      return false;
+      // Se o WhatsApp não estiver instalado, tenta o link web como último recurso
+      try {
+        const fullPhone = this.formatPhoneNumber(phone);
+        const webUrl = `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
+        await Linking.openURL(webUrl);
+        return true;
+      } catch {
+        Alert.alert(
+          'WhatsApp não encontrado',
+          'Não foi possível abrir o WhatsApp. Verifique se ele está instalado.',
+        );
+        return false;
+      }
     }
   }
 
