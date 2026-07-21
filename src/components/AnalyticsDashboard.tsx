@@ -14,11 +14,15 @@ import {
   getDocs,
   orderBy,
   limit,
-  type Timestamp,
+  getCountFromServer,
+  getAggregateFromServer,
+  count,
+  sum,
+  average,
 } from 'firebase/firestore';
 import { useTheme, type Theme } from '../context/ThemeContext';
-import { formatMoney, precoParaCentavos } from '../utils/dateUtils';
-import type { Agendamento, Avaliacao } from '../types';
+import { formatMoney } from '../utils/dateUtils';
+import type { Agendamento } from '../types';
 
 interface HorarioPopular {
   horario: string;
@@ -35,10 +39,6 @@ interface AnalyticsData {
   faturamentoMesCentavos: number;
   horariosPopulares: HorarioPopular[];
 }
-
-/** createdAt vem sempre como Timestamp nas leituras */
-const toDate = (ag: Agendamento): Date | undefined =>
-  (ag.createdAt as Timestamp | undefined)?.toDate?.();
 
 export default function AnalyticsDashboard({ barbeiroId }: { barbeiroId: string }) {
   const { theme } = useTheme();
@@ -60,6 +60,12 @@ export default function AnalyticsDashboard({ barbeiroId }: { barbeiroId: string 
     if (barbeiroId) fetchAnalytics();
   }, [barbeiroId]);
 
+  /**
+   * Item 20 da auditoria: métricas via AGREGAÇÃO SERVER-SIDE do Firestore
+   * (count/sum/average). O cálculo acontece no servidor do Google e o app
+   * recebe apenas o número final — ~1 leitura por 1000 registros varridos,
+   * em vez de baixar centenas de documentos. Escala para qualquer volume.
+   */
   const fetchAnalytics = async () => {
     try {
       const hoje = new Date();
@@ -77,76 +83,69 @@ export default function AnalyticsDashboard({ barbeiroId }: { barbeiroId: string 
         String(hoje.getDate()).padStart(2, '0'),
       ].join('-');
 
-      const agSnap = await getDocs(
-        query(
-          collection(db, 'agendamentos'),
-          where('barbeiroId', '==', barbeiroId),
-          orderBy('createdAt', 'desc'),
-          limit(500),           // teto razoável; use Cloud Function em produção
+      const ags = collection(db, 'agendamentos');
+      const doBarbeiro = where('barbeiroId', '==', barbeiroId);
+
+      const [
+        totalSnap,
+        hojeSnap,
+        semanaSnap,
+        mesSnap,
+        avaliacoesSnap,
+        faturamentoSnap,
+        recentesSnap,
+      ] = await Promise.all([
+        // Contagens — o servidor conta, o app recebe só o número
+        getCountFromServer(query(ags, doBarbeiro)),
+        getCountFromServer(query(ags, doBarbeiro, where('data', '==', hojeStr))),
+        getCountFromServer(
+          query(ags, doBarbeiro, where('createdAt', '>=', inicioSemana)),
         ),
-      );
-      const agendamentos: Agendamento[] = agSnap.docs.map((d) => ({
-        ...(d.data() as Omit<Agendamento, 'id'>),
-        id: d.id,
-      }));
+        getCountFromServer(query(ags, doBarbeiro, where('createdAt', '>=', inicioMes))),
 
-      const avSnap = await getDocs(
-        query(collection(db, 'avaliacoes'), where('barbeiroId', '==', barbeiroId)),
-      );
-      const avaliacoes = avSnap.docs.map((d) => d.data() as Avaliacao);
+        // Avaliações — média e total em uma única agregação
+        getAggregateFromServer(
+          query(collection(db, 'avaliacoes'), where('barbeiroId', '==', barbeiroId)),
+          { media: average('rating'), total: count() },
+        ),
 
-      const totalAgendamentos = agendamentos.length;
+        // Faturamento do mês — soma de centavos no servidor.
+        // (Docs antigos sem precoEmCentavos não entram na soma; novos sempre têm.)
+        getAggregateFromServer(
+          query(
+            ags,
+            doBarbeiro,
+            where('status', 'in', ['confirmado', 'concluido']),
+            where('createdAt', '>=', inicioMes),
+          ),
+          { total: sum('precoEmCentavos') },
+        ),
 
-      // Comparação por string local — sem risco de bug de timezone
-      const agendamentosHoje = agendamentos.filter((ag) => ag.data === hojeStr).length;
-
-      const agendamentosSemana = agendamentos.filter((ag) => {
-        const ts = toDate(ag);
-        return ts && ts >= inicioSemana;
-      }).length;
-
-      const agendamentosMes = agendamentos.filter((ag) => {
-        const ts = toDate(ag);
-        return ts && ts >= inicioMes;
-      }).length;
-
-      const avaliacaoMedia =
-        avaliacoes.length > 0
-          ? avaliacoes.reduce((sum, av) => sum + (av.rating || 0), 0) / avaliacoes.length
-          : 0;
-
-      // Faturamento: usa precoEmCentavos (int) se disponível, cai de volta para preco string
-      const faturamentoMesCentavos = agendamentos
-        .filter((ag) => {
-          if (ag.status !== 'confirmado' && ag.status !== 'concluido') return false;
-          const ts = toDate(ag);
-          return ts && ts >= inicioMes;
-        })
-        .reduce((sum, ag) => {
-          const cents =
-            ag.precoEmCentavos != null
-              ? ag.precoEmCentavos
-              : precoParaCentavos(ag.preco);
-          return sum + cents;
-        }, 0);
+        // Horários populares: única métrica que precisa dos docs —
+        // amostra dos 100 agendamentos mais recentes
+        getDocs(query(ags, doBarbeiro, orderBy('createdAt', 'desc'), limit(100))),
+      ]);
 
       const horariosCount: Record<string, number> = {};
-      agendamentos.forEach((ag) => {
+      recentesSnap.docs.forEach((d) => {
+        const ag = d.data() as Agendamento;
         if (ag.horario) horariosCount[ag.horario] = (horariosCount[ag.horario] || 0) + 1;
       });
       const horariosPopulares: HorarioPopular[] = Object.entries(horariosCount)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 3)
-        .map(([horario, count]) => ({ horario, count }));
+        .map(([horario, qtd]) => ({ horario, count: qtd }));
+
+      const media = avaliacoesSnap.data().media ?? 0;
 
       setAnalytics({
-        totalAgendamentos,
-        agendamentosHoje,
-        agendamentosSemana,
-        agendamentosMes,
-        avaliacaoMedia: Math.round(avaliacaoMedia * 10) / 10,
-        totalAvaliacoes: avaliacoes.length,
-        faturamentoMesCentavos,
+        totalAgendamentos: totalSnap.data().count,
+        agendamentosHoje: hojeSnap.data().count,
+        agendamentosSemana: semanaSnap.data().count,
+        agendamentosMes: mesSnap.data().count,
+        avaliacaoMedia: Math.round(media * 10) / 10,
+        totalAvaliacoes: avaliacoesSnap.data().total,
+        faturamentoMesCentavos: faturamentoSnap.data().total,
         horariosPopulares,
       });
     } catch (error) {
