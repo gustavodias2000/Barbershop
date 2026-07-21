@@ -9,7 +9,7 @@
  * nome, email ou telefone — e por isso pode ser lida por qualquer usuário
  * logado com segurança.
  */
-import { db } from '../../firebase';
+import { db } from '../../firebaseConfig';
 import {
   collection,
   query,

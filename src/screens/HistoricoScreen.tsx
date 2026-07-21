@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth } from '../../firebase';
+import { auth } from '../../firebaseConfig';
 import WhatsAppService from '../services/WhatsAppService';
 import RatingComponent from '../components/RatingComponent';
 import { liberarSlot } from '../services/OcupacaoService';

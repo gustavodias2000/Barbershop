@@ -2,7 +2,7 @@
  * BarbeiroRepository — único ponto de acesso à coleção `barbeiros`
  * (a "vitrine" que os clientes veem).
  */
-import { db } from '../../../firebase';
+import { db } from '../../../firebaseConfig';
 import {
   collection,
   query,

@@ -8,7 +8,7 @@ import {
   Modal,
   Alert
 } from 'react-native';
-import { db, auth } from '../../firebase';
+import { db, auth } from '../../firebaseConfig';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { atualizarStatus } from '../data/repositories/AgendamentoRepository';
 import type { Agendamento } from '../types';

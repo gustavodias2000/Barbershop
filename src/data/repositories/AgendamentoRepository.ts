@@ -5,7 +5,7 @@
  * (imutável) em vez de email. O email continua gravado no doc apenas para
  * exibição/contato.
  */
-import { db } from '../../../firebase';
+import { db } from '../../../firebaseConfig';
 import {
   collection,
   query,

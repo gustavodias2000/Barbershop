@@ -5,7 +5,7 @@
  * duplicado em 4 telas (ClienteHome, BarbeiroHome, AgendamentoScreen, Perfil).
  */
 import { useState, useEffect, useCallback } from 'react';
-import { auth } from '../../firebase';
+import { auth } from '../../firebaseConfig';
 import { getProfile } from '../data/repositories/UsuarioRepository';
 import type { Usuario } from '../types';
 

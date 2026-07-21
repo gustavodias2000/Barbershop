@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth } from '../../firebase';
+import { auth } from '../../firebaseConfig';
 import WhatsAppService from '../services/WhatsAppService';
 import PaymentModal from '../components/PaymentModal';
 import CalendarService from '../services/CalendarService';

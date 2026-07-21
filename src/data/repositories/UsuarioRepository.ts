@@ -5,7 +5,7 @@
  * elimina a duplicação de fetchUserProfile (antes copiada em 4 telas) e
  * facilita testes (basta mockar este módulo).
  */
-import { db } from '../../../firebase';
+import { db } from '../../../firebaseConfig';
 import {
   doc,
   getDoc,

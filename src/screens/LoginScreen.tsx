@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../../firebase';
+import { auth } from '../../firebaseConfig';
 import { getProfile } from '../data/repositories/UsuarioRepository';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';

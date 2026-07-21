@@ -8,7 +8,7 @@
  */
 import { Alert, Linking } from 'react-native';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '../../firebase';
+import { functions } from '../../firebaseConfig';
 
 interface PessoaInfo {
   nome: string;

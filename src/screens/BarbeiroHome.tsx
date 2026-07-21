@@ -9,7 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth } from '../../firebase';
+import { auth } from '../../firebaseConfig';
 import WhatsAppService from '../services/WhatsAppService';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import { liberarSlot } from '../services/OcupacaoService';

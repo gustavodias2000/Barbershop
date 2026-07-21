@@ -6,7 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { db } from '../../firebase';
+import { db } from '../../firebaseConfig';
 import {
   collection,
   query,

@@ -15,7 +15,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 // Mock Firebase (app local)
-jest.mock('./firebase', () => ({
+jest.mock('./firebaseConfig', () => ({
   auth: {
     currentUser: { uid: 'test-uid', email: 'test@example.com' },
     signOut: jest.fn(),

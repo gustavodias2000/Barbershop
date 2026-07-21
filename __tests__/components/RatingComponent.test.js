@@ -4,7 +4,7 @@ import '@testing-library/jest-native/extend-expect';
 import RatingComponent from '../../src/components/RatingComponent';
 
 // Mock Firebase
-jest.mock('../../firebase', () => ({
+jest.mock('../../firebaseConfig', () => ({
   db: {},
   auth: {
     currentUser: { email: 'test@example.com' }

@@ -14,7 +14,7 @@ import messaging, {
   type FirebaseMessagingTypes,
 } from '@react-native-firebase/messaging';
 import { Alert } from 'react-native';
-import { auth } from '../../firebase';
+import { auth } from '../../firebaseConfig';
 import { saveFcmToken } from '../data/repositories/UsuarioRepository';
 
 type RemoteMessage = FirebaseMessagingTypes.RemoteMessage;

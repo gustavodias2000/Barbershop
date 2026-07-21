@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { serverTimestamp } from 'firebase/firestore';
-import { auth } from '../../firebase';
+import { auth } from '../../firebaseConfig';
 import { createProfile } from '../data/repositories/UsuarioRepository';
 import { upsertBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { maskPhone, formatPhoneToE164, precoParaCentavos } from '../utils/dateUtils';

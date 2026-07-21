@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { auth } from '../../firebase';
+import { auth } from '../../firebaseConfig';
 import {
   updatePassword,
   EmailAuthProvider,

@@ -11,7 +11,7 @@ jest.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: jest.fn()
 }));
 
-jest.mock('../../firebase', () => ({
+jest.mock('../../firebaseConfig', () => ({
   auth: {}
 }));
 
