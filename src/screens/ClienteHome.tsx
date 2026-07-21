@@ -161,7 +161,7 @@ export default function ClienteHome({ navigation }: Props) {
             <Text style={s.historicoButtonText}>Histórico</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={s.profileButton}
+            style={s.logoutButton}
             accessibilityRole="button"
             accessibilityLabel="Sair do aplicativo"
             onPress={() =>
@@ -178,7 +178,7 @@ export default function ClienteHome({ navigation }: Props) {
               ])
             }
           >
-            <Text style={s.profileButtonText}>Sair</Text>
+            <Text style={s.logoutButtonText}>🚪</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -290,18 +290,18 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-  profileButton: {
-    backgroundColor: theme.colors.error,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-    minHeight: 44,
+  logoutButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.colors.surfaceVariant,
     justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  profileButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
+  logoutButtonText: {
+    fontSize: 20,
   },
   agendamentosSection: {
     backgroundColor: theme.colors.surface,

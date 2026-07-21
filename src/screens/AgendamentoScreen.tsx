@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
   const s = getStyles(theme);
 
   const { profile: userProfile } = useUserProfile();
+  const scrollRef = useRef<ScrollView>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
@@ -48,8 +49,23 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
   // Data de hoje em formato local YYYY-MM-DD (mesma lógica de getNextDays / toLocalDateString)
   const todayStr = toLocalDateString(new Date());
 
+  // Auto-seleciona o primeiro dia disponível para que os horários apareçam
+  // imediatamente ao abrir a tela, sem precisar que o usuário clique numa data.
   useEffect(() => {
-    if (selectedDate) fetchHorariosOcupados();
+    if (availableDates.length > 0 && !selectedDate) {
+      setSelectedDate(availableDates[0].date);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (selectedDate) {
+      fetchHorariosOcupados();
+      // Rola a tela para baixo após um frame para revelar a grade de horários.
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ y: 180, animated: true });
+      }, 150);
+    }
   }, [selectedDate]);
 
   /**
@@ -181,7 +197,7 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
-      <ScrollView style={s.container}>
+      <ScrollView ref={scrollRef} style={s.container}>
         {/* Cabeçalho do barbeiro */}
         <View style={s.header}>
           <Text style={s.title}>Agendar com {barbeiro.nome}</Text>

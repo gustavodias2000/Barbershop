@@ -64,7 +64,6 @@ export default function LoginScreen({ navigation }: Props) {
       const userData = await getProfile(uid);
 
       // Item 8.5: sem perfil no banco, o fallback é SEMPRE cliente.
-      // (Antes o role era inferido pelo texto do email — inseguro.)
       navigation.replace(userData?.tipo === 'barbeiro' ? 'Barbeiro' : 'Cliente');
     } catch (error: any) {
       console.error('Erro no login:', error);
@@ -119,6 +118,7 @@ export default function LoginScreen({ navigation }: Props) {
           text: 'Enviar',
           onPress: async () => {
             try {
+              // languageCode já está em pt-BR (definido no firebaseConfig)
               await sendPasswordResetEmail(auth, email.trim());
               Alert.alert(
                 'Email enviado!',
@@ -151,20 +151,28 @@ export default function LoginScreen({ navigation }: Props) {
         <ScrollView
           contentContainerStyle={s.scrollContainer}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View style={s.header}>
-            <Text style={s.title}>Barbershop</Text>
-            <Text style={s.subtitle}>Faça seu login</Text>
+          {/* ── Cabeçalho visual ── */}
+          <View style={s.hero}>
+            <View style={s.logoCircle}>
+              <Text style={s.logoEmoji}>💈</Text>
+            </View>
+            <Text style={s.appName}>Barbershop</Text>
+            <Text style={s.tagline}>Agende seu horário com facilidade</Text>
           </View>
 
-          <View style={s.form}>
+          {/* ── Formulário ── */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Entrar na sua conta</Text>
+
             <View style={s.inputContainer}>
               <Text style={s.label}>Email</Text>
               <TextInput
                 value={email}
                 onChangeText={(text) => { setEmail(text); clearError('email'); }}
                 style={[s.input, errors.email && s.inputError]}
-                placeholder="Digite seu email"
+                placeholder="seu@email.com"
                 placeholderTextColor={theme.colors.textMuted}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -181,7 +189,7 @@ export default function LoginScreen({ navigation }: Props) {
                 value={senha}
                 onChangeText={(text) => { setSenha(text); clearError('senha'); }}
                 style={[s.input, errors.senha && s.inputError]}
-                placeholder="Digite sua senha"
+                placeholder="Sua senha"
                 placeholderTextColor={theme.colors.textMuted}
                 secureTextEntry
                 autoCapitalize="none"
@@ -193,7 +201,7 @@ export default function LoginScreen({ navigation }: Props) {
             </View>
 
             <TouchableOpacity
-              style={[s.button, loading && s.buttonDisabled]}
+              style={[s.loginButton, loading && s.loginButtonDisabled]}
               accessibilityRole="button"
               accessibilityLabel="Entrar no aplicativo"
               accessibilityState={{ disabled: loading }}
@@ -203,7 +211,7 @@ export default function LoginScreen({ navigation }: Props) {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={s.buttonText}>Entrar</Text>
+                <Text style={s.loginButtonText}>Entrar</Text>
               )}
             </TouchableOpacity>
 
@@ -215,20 +223,18 @@ export default function LoginScreen({ navigation }: Props) {
             >
               <Text style={s.forgotPasswordText}>Esqueceu sua senha?</Text>
             </TouchableOpacity>
+          </View>
 
-            <View style={s.divider}>
-              <View style={s.dividerLine} />
-              <Text style={s.dividerText}>ou</Text>
-              <View style={s.dividerLine} />
-            </View>
-
+          {/* ── Criar conta ── */}
+          <View style={s.registerSection}>
+            <Text style={s.registerPrompt}>Ainda não tem conta?</Text>
             <TouchableOpacity
               style={s.registerButton}
               accessibilityRole="button"
               accessibilityLabel="Criar nova conta"
               onPress={() => navigation.navigate('Register')}
             >
-              <Text style={s.registerButtonText}>Criar nova conta</Text>
+              <Text style={s.registerButtonText}>Criar conta grátis</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -247,76 +253,118 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
+    padding: 24,
     justifyContent: 'center',
-    padding: 20,
   },
-  header: {
+
+  /* ── Hero / Logo ── */
+  hero: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
-  title: {
-    fontSize: 32,
+  logoCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  logoEmoji: {
+    fontSize: 44,
+  },
+  appName: {
+    fontSize: 34,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginBottom: 8,
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 16,
+  tagline: {
+    fontSize: 15,
     color: theme.colors.textSecondary,
+    textAlign: 'center',
   },
-  form: {
+
+  /* ── Card do formulário ── */
+  card: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  inputContainer: {
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 4,
     marginBottom: 20,
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: theme.colors.text,
-    marginBottom: 8,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   input: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 16,
     backgroundColor: theme.colors.surfaceVariant,
     color: theme.colors.text,
-    minHeight: 48,
+    minHeight: 50,
   },
   inputError: {
     borderColor: theme.colors.error,
   },
   errorText: {
     color: theme.colors.error,
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 4,
   },
-  button: {
+  loginButton: {
     backgroundColor: theme.colors.primary,
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: 10,
+    paddingVertical: 15,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
     minHeight: 52,
     justifyContent: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.30,
+    shadowRadius: 5,
+    elevation: 4,
   },
-  buttonDisabled: {
+  loginButtonDisabled: {
     backgroundColor: theme.colors.textMuted,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  buttonText: {
+  loginButtonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   forgotPassword: {
     alignItems: 'center',
@@ -327,35 +375,33 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   forgotPasswordText: {
     color: theme.colors.primary,
-    fontSize: 15,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: theme.colors.border,
-  },
-  dividerText: {
-    marginHorizontal: 12,
-    color: theme.colors.textSecondary,
     fontSize: 14,
+    fontWeight: '500',
+  },
+
+  /* ── Seção "criar conta" ── */
+  registerSection: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  registerPrompt: {
+    fontSize: 15,
+    color: theme.colors.textSecondary,
   },
   registerButton: {
     borderWidth: 2,
     borderColor: theme.colors.primary,
-    borderRadius: 8,
-    padding: 14,
+    borderRadius: 10,
+    paddingVertical: 13,
+    paddingHorizontal: 32,
     alignItems: 'center',
     minHeight: 52,
     justifyContent: 'center',
+    width: '100%',
   },
   registerButtonText: {
     color: theme.colors.primary,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
