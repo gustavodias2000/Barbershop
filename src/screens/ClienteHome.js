@@ -6,36 +6,28 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { db, auth } from '../../firebase';
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  doc,
-  getDoc,
-  limit,
-} from 'firebase/firestore';
-import WhatsAppService from '../services/WhatsAppService';
+import { auth } from '../../firebase';
 import NotificationService from '../services/NotificationService';
+import { listarBarbeiros } from '../data/repositories/BarbeiroRepository';
+import { listarDoCliente } from '../data/repositories/AgendamentoRepository';
+import useUserProfile from '../hooks/useUserProfile';
 import { useTheme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { formatPreco } from '../utils/dateUtils';
+import { SkeletonList } from '../components/Skeleton';
 
 export default function ClienteHome({ navigation }) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
+  const { profile: userProfile } = useUserProfile();
   const [barbeiros, setBarbeiros] = useState([]);
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
     fetchAll();
@@ -45,7 +37,7 @@ export default function ClienteHome({ navigation }) {
 
   const fetchAll = async () => {
     try {
-      await Promise.all([fetchUserProfile(), fetchBarbeiros(), fetchAgendamentos()]);
+      await Promise.all([fetchBarbeiros(), fetchAgendamentos()]);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       Alert.alert('Erro', 'Não foi possível carregar os dados.');
@@ -54,23 +46,9 @@ export default function ClienteHome({ navigation }) {
     }
   };
 
-  const fetchUserProfile = async () => {
-    try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      const userDoc = await getDoc(doc(db, 'usuarios', uid));
-      if (userDoc.exists()) setUserProfile(userDoc.data());
-    } catch (error) {
-      console.error('Erro ao buscar perfil:', error);
-    }
-  };
-
   const fetchBarbeiros = async () => {
     try {
-      // Pagina os primeiros 50 barbeiros — suficiente para qualquer barbearia real
-      const q = query(collection(db, 'barbeiros'), limit(50));
-      const snap = await getDocs(q);
-      setBarbeiros(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setBarbeiros(await listarBarbeiros(50));
     } catch (error) {
       console.error('Erro ao buscar barbeiros:', error);
     }
@@ -78,18 +56,9 @@ export default function ClienteHome({ navigation }) {
 
   const fetchAgendamentos = async () => {
     try {
-      const userEmail = auth.currentUser?.email;
-      if (!userEmail) return;
-
-      const q = query(
-        collection(db, 'agendamentos'),
-        where('cliente', '==', userEmail),
-        orderBy('createdAt', 'desc'),
-        limit(20),
-      );
-
-      const snap = await getDocs(q);
-      setAgendamentos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      // Item 9.3: identidade por uid (imutável), não mais por email
+      const uid = auth.currentUser?.uid;
+      setAgendamentos(await listarDoCliente(uid, { max: 20 }));
     } catch (error) {
       console.error('Erro ao buscar agendamentos:', error);
     }
@@ -98,7 +67,7 @@ export default function ClienteHome({ navigation }) {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([fetchUserProfile(), fetchBarbeiros(), fetchAgendamentos()]);
+      await Promise.all([fetchBarbeiros(), fetchAgendamentos()]);
     } catch (error) {
       console.error('Erro ao atualizar:', error);
     } finally {
@@ -151,10 +120,10 @@ export default function ClienteHome({ navigation }) {
   );
 
   if (loading) {
+    // Skeleton loading (item 17): fantasmas do conteúdo em vez de spinner
     return (
-      <SafeAreaView style={s.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={s.loadingText}>Carregando...</Text>
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        <SkeletonList count={4} />
       </SafeAreaView>
     );
   }

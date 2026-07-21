@@ -9,7 +9,8 @@ import {
   Alert
 } from 'react-native';
 import { db, auth } from '../../firebase';
-import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { atualizarStatus } from '../data/repositories/AgendamentoRepository';
 
 export default function RatingComponent({ visible, onClose, agendamento }) {
   const [rating, setRating] = useState(0);
@@ -33,16 +34,11 @@ export default function RatingComponent({ visible, onClose, agendamento }) {
         clienteNome: agendamento.clienteNome,
         rating,
         comment: comment.trim(),
-        createdAt: new Date()
+        createdAt: serverTimestamp()
       });
 
-      // Atualizar status do agendamento
-      const agendamentoRef = doc(db, 'agendamentos', agendamento.id);
-      await updateDoc(agendamentoRef, {
-        status: 'avaliado',
-        rating,
-        ratedAt: new Date()
-      });
+      // Atualizar status do agendamento via repository
+      await atualizarStatus(agendamento.id, 'avaliado', { rating });
 
       Alert.alert('Sucesso!', 'Avaliação enviada com sucesso!');
       onClose();
@@ -62,6 +58,9 @@ export default function RatingComponent({ visible, onClose, agendamento }) {
             key={star}
             onPress={() => setRating(star)}
             style={styles.starButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Avaliar com ${star} ${star === 1 ? 'estrela' : 'estrelas'}`}
+            accessibilityState={{ selected: star <= rating }}
           >
             <Text style={[
               styles.star,

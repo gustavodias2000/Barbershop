@@ -9,9 +9,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import PaymentService from '../services/PaymentService';
-import { formatPreco, precoParaCentavos } from '../utils/dateUtils';
-import { db } from '../../firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { precoParaCentavos } from '../utils/dateUtils';
+import { atualizarStatus } from '../data/repositories/AgendamentoRepository';
 
 export default function PaymentScreen({ route, navigation }) {
   const { agendamento } = route.params;
@@ -32,10 +31,8 @@ export default function PaymentScreen({ route, navigation }) {
           text: 'Confirmar',
           onPress: async () => {
             try {
-              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
-                status: 'confirmado',
+              await atualizarStatus(agendamento.id, 'confirmado', {
                 paymentMethod: 'presencial',
-                confirmedAt: serverTimestamp(),
               });
               
               Alert.alert(

@@ -6,8 +6,12 @@
  * NUNCA é embutido no app — assim ninguém consegue extraí-lo do APK.
  */
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
+const admin = require('firebase-admin');
+
+admin.initializeApp();
 
 // Secrets configurados via `firebase functions:secrets:set` (ver GUIA no final)
 const WHATSAPP_TOKEN = defineSecret('WHATSAPP_TOKEN');
@@ -73,5 +77,76 @@ exports.sendWhatsApp = onCall(
       logger.error('Erro na requisição WhatsApp', error);
       throw new HttpsError('internal', 'Erro ao contatar o WhatsApp.');
     }
+  },
+);
+
+/**
+ * lembretesAgendamento — item 18 da auditoria (reduz no-show).
+ *
+ * Roda todos os dias às 18h (horário de Brasília) e envia um push para cada
+ * cliente com agendamento CONFIRMADO no dia seguinte. Usa o campo
+ * usuarios/{uid}.fcmToken, salvo pelo app quando o usuário permite
+ * notificações.
+ */
+exports.lembretesAgendamento = onSchedule(
+  {
+    schedule: '0 18 * * *',
+    timeZone: 'America/Sao_Paulo',
+    region: 'us-central1',
+  },
+  async () => {
+    const db = admin.firestore();
+
+    // "Amanhã" no fuso de São Paulo, formato YYYY-MM-DD (igual ao campo `data`)
+    const agora = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }),
+    );
+    agora.setDate(agora.getDate() + 1);
+    const amanha = [
+      agora.getFullYear(),
+      String(agora.getMonth() + 1).padStart(2, '0'),
+      String(agora.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    const snap = await db
+      .collection('agendamentos')
+      .where('data', '==', amanha)
+      .where('status', '==', 'confirmado')
+      .get();
+
+    if (snap.empty) {
+      logger.info(`Sem agendamentos confirmados para ${amanha}.`);
+      return;
+    }
+
+    let enviados = 0;
+    for (const docSnap of snap.docs) {
+      const ag = docSnap.data();
+      if (!ag.clienteUid) continue;
+
+      try {
+        const userSnap = await db.collection('usuarios').doc(ag.clienteUid).get();
+        const fcmToken = userSnap.exists ? userSnap.data().fcmToken : null;
+        if (!fcmToken) continue;
+
+        await admin.messaging().send({
+          token: fcmToken,
+          notification: {
+            title: '💈 Lembrete de agendamento',
+            body: `Amanhã às ${ag.horario} com ${ag.barbeiroNome}. Até lá!`,
+          },
+          data: {
+            type: 'lembrete_agendamento',
+            agendamentoId: docSnap.id,
+          },
+        });
+        enviados++;
+      } catch (error) {
+        // Token inválido/expirado não deve interromper os demais envios
+        logger.warn(`Falha ao notificar ${ag.clienteUid}: ${error.message}`);
+      }
+    }
+
+    logger.info(`Lembretes: ${enviados}/${snap.size} enviados para ${amanha}.`);
   },
 );

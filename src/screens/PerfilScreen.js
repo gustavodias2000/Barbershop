@@ -11,9 +11,20 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { auth, db } from '../../firebase';
-import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { auth } from '../../firebase';
+import {
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  sendEmailVerification,
+  deleteUser,
+} from 'firebase/auth';
+import {
+  getProfile,
+  updateProfile,
+  deleteProfile,
+} from '../data/repositories/UsuarioRepository';
+import { upsertBarbeiro, removerBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { useTheme } from '../context/ThemeContext';
 import ThemeSelector from '../components/ThemeSelector';
 import { maskPhone, formatPhoneToE164 } from '../utils/dateUtils';
@@ -34,6 +45,12 @@ export default function PerfilScreen({ navigation }) {
   const [changingPassword, setChangingPassword] = useState(false);
   const [showPasswordSection, setShowPasswordSection] = useState(false);
 
+  // Exclusão de conta (LGPD)
+  const [showDeleteSection, setShowDeleteSection] = useState(false);
+  const [senhaExclusao, setSenhaExclusao] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
+
   useEffect(() => {
     fetchUserData();
   }, []);
@@ -43,9 +60,8 @@ export default function PerfilScreen({ navigation }) {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
 
-      const userDoc = await getDoc(doc(db, 'usuarios', uid));
-      if (userDoc.exists()) {
-        const data = userDoc.data();
+      const data = await getProfile(uid);
+      if (data) {
         setUserData(data);
         setNome(data.nome || '');
 
@@ -83,26 +99,18 @@ export default function PerfilScreen({ navigation }) {
       const uid = auth.currentUser?.uid;
       const telefoneE164 = formatPhoneToE164(telefone);
 
-      await updateDoc(doc(db, 'usuarios', uid), {
+      await updateProfile(uid, {
         nome: nome.trim(),
         telefone: telefoneE164,
-        updatedAt: new Date(),
       });
 
       // Se for barbeiro, mantém a vitrine (coleção `barbeiros`) sincronizada.
-      // setDoc com merge também cria o doc caso o barbeiro seja antigo (item 3).
+      // upsert com merge também cria o doc caso o barbeiro seja antigo (item 3).
       if (userData?.tipo === 'barbeiro') {
-        await setDoc(
-          doc(db, 'barbeiros', uid),
-          {
-            id: uid,
-            uid,
-            nome: nome.trim(),
-            telefone: telefoneE164,
-            updatedAt: new Date(),
-          },
-          { merge: true },
-        );
+        await upsertBarbeiro(uid, {
+          nome: nome.trim(),
+          telefone: telefoneE164,
+        });
       }
 
       Alert.alert('Sucesso!', 'Perfil atualizado com sucesso.');
@@ -154,6 +162,89 @@ export default function PerfilScreen({ navigation }) {
     }
   };
 
+  const handleResendVerification = async () => {
+    setResendingVerification(true);
+    try {
+      await sendEmailVerification(auth.currentUser);
+      Alert.alert(
+        'Email enviado',
+        'Verifique sua caixa de entrada (e o spam) e clique no link de confirmação.',
+      );
+    } catch (error) {
+      let msg = 'Não foi possível enviar o email. Tente novamente mais tarde.';
+      if (error.code === 'auth/too-many-requests') {
+        msg = 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+      }
+      Alert.alert('Erro', msg);
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
+  /**
+   * Exclusão de conta (LGPD — direito de exclusão dos dados).
+   * Reautentica, remove os documentos do Firestore e apaga a conta do Auth.
+   */
+  const handleDeleteAccount = async () => {
+    if (!senhaExclusao.trim()) {
+      Alert.alert('Atenção', 'Digite sua senha para confirmar a exclusão.');
+      return;
+    }
+
+    Alert.alert(
+      'Excluir conta',
+      'Esta ação é permanente: seu perfil e seus dados pessoais serão apagados. Deseja continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir definitivamente',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const user = auth.currentUser;
+              const uid = user.uid;
+
+              // 1. Reautentica (o Firebase exige login recente para excluir)
+              const credential = EmailAuthProvider.credential(
+                user.email,
+                senhaExclusao,
+              );
+              await reauthenticateWithCredential(user, credential);
+
+              // 2. Remove os dados do Firestore (perfil + vitrine, se barbeiro)
+              if (userData?.tipo === 'barbeiro') {
+                await removerBarbeiro(uid);
+              }
+              await deleteProfile(uid);
+
+              // 3. Apaga a conta de autenticação
+              await deleteUser(user);
+
+              Alert.alert(
+                'Conta excluída',
+                'Sua conta e seus dados pessoais foram removidos.',
+                [{ text: 'OK', onPress: () => navigation.replace('Login') }],
+              );
+            } catch (error) {
+              console.error('Erro ao excluir conta:', error);
+              let msg = 'Não foi possível excluir a conta. Tente novamente.';
+              if (
+                error.code === 'auth/wrong-password' ||
+                error.code === 'auth/invalid-credential'
+              ) {
+                msg = 'Senha incorreta.';
+              }
+              Alert.alert('Erro', msg);
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleLogout = () => {
     Alert.alert('Sair', 'Deseja realmente sair?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -202,6 +293,31 @@ export default function PerfilScreen({ navigation }) {
             </Text>
           </View>
         </View>
+
+        {/* Verificação de email (item 13) */}
+        {auth.currentUser && !auth.currentUser.emailVerified && (
+          <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              ✉️ Email não verificado
+            </Text>
+            <Text style={[styles.verificationText, { color: theme.colors.textSecondary }]}>
+              Confirme seu email para garantir a recuperação da sua conta.
+            </Text>
+            <TouchableOpacity
+              style={[styles.saveButton, resendingVerification && styles.saveButtonDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Reenviar email de verificação"
+              onPress={handleResendVerification}
+              disabled={resendingVerification}
+            >
+              {resendingVerification ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.saveButtonText}>Reenviar email de verificação</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Dados do perfil */}
         <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
@@ -330,6 +446,74 @@ export default function PerfilScreen({ navigation }) {
           )}
         </View>
 
+        {/* Privacidade (LGPD) */}
+        <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            Privacidade
+          </Text>
+          <TouchableOpacity
+            style={styles.privacyLink}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir Política de Privacidade"
+            onPress={() => navigation.navigate('Privacidade')}
+          >
+            <Text style={[styles.privacyLinkText, { color: theme.colors.primary }]}>
+              📄 Ver Política de Privacidade
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.privacyLink}
+            accessibilityRole="button"
+            accessibilityLabel="Excluir minha conta e meus dados"
+            onPress={() => setShowDeleteSection((v) => !v)}
+          >
+            <Text style={[styles.privacyLinkText, { color: '#c0392b' }]}>
+              🗑️ Excluir minha conta e meus dados
+            </Text>
+          </TouchableOpacity>
+
+          {showDeleteSection && (
+            <View style={styles.deleteSection}>
+              <Text style={[styles.deleteWarning, { color: theme.colors.textSecondary }]}>
+                A exclusão é permanente e remove seu perfil e dados pessoais
+                (LGPD, art. 18). Digite sua senha para confirmar.
+              </Text>
+              <TextInput
+                value={senhaExclusao}
+                onChangeText={setSenhaExclusao}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.background,
+                    color: theme.colors.text,
+                    borderColor: theme.colors.border,
+                    marginBottom: 12,
+                  },
+                ]}
+                placeholder="Sua senha"
+                placeholderTextColor={theme.colors.textSecondary}
+                secureTextEntry
+                autoCapitalize="none"
+                accessibilityLabel="Senha para confirmar exclusão da conta"
+              />
+              <TouchableOpacity
+                style={[styles.deleteButton, deleting && styles.saveButtonDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel="Confirmar exclusão da conta"
+                onPress={handleDeleteAccount}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.deleteButtonText}>Excluir definitivamente</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Sair da conta</Text>
@@ -441,6 +625,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#bdc3c7',
   },
   saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  verificationText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  privacyLink: {
+    paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  privacyLinkText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  deleteSection: {
+    marginTop: 8,
+  },
+  deleteWarning: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  deleteButton: {
+    backgroundColor: '#c0392b',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

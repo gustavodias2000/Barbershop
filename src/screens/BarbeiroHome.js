@@ -6,80 +6,44 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { db, auth } from '../../firebase';
-import {
-  collection,
-  getDocs,
-  updateDoc,
-  doc,
-  query,
-  where,
-  orderBy,
-  getDoc,
-  limit,
-} from 'firebase/firestore';
+import { auth } from '../../firebase';
 import WhatsAppService from '../services/WhatsAppService';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import { liberarSlot } from '../services/OcupacaoService';
-import { formatDateTime } from '../utils/dateUtils';
+import {
+  listarDoBarbeiro,
+  atualizarStatus,
+} from '../data/repositories/AgendamentoRepository';
+import useUserProfile from '../hooks/useUserProfile';
+import { formatDateTime, formatPreco } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
+import { SkeletonList } from '../components/Skeleton';
 
 export default function BarbeiroHome({ navigation }) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
+  const { profile: userProfile, refresh: refreshProfile } = useUserProfile();
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
-  const [userProfile, setUserProfile] = useState(null);
   const [stats, setStats] = useState({ pendentes: 0, confirmados: 0, total: 0 });
 
   useEffect(() => {
-    fetchAll();
+    fetchAgendamentos().finally(() => setLoading(false));
   }, []);
-
-  const fetchAll = async () => {
-    try {
-      await Promise.all([fetchUserProfile(), fetchAgendamentos()]);
-    } catch (error) {
-      console.error('Erro ao carregar:', error);
-      Alert.alert('Erro', 'Não foi possível carregar os dados.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchUserProfile = async () => {
-    try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      const userDoc = await getDoc(doc(db, 'usuarios', uid));
-      if (userDoc.exists()) setUserProfile(userDoc.data());
-    } catch (error) {
-      console.error('Erro ao buscar perfil:', error);
-    }
-  };
 
   const fetchAgendamentos = async () => {
     try {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
 
-      const q = query(
-        collection(db, 'agendamentos'),
-        where('barbeiroId', '==', uid),
-        orderBy('createdAt', 'desc'),
-        limit(50),
-      );
-
-      const snap = await getDocs(q);
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const data = await listarDoBarbeiro(uid, 50);
 
       setAgendamentos(data);
       setStats({
@@ -96,7 +60,7 @@ export default function BarbeiroHome({ navigation }) {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([fetchUserProfile(), fetchAgendamentos()]);
+      await Promise.all([refreshProfile(), fetchAgendamentos()]);
     } catch (error) {
       console.error('Erro ao atualizar:', error);
     } finally {
@@ -114,10 +78,7 @@ export default function BarbeiroHome({ navigation }) {
           text: 'Confirmar',
           onPress: async () => {
             try {
-              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
-                status: 'confirmado',
-                confirmedAt: new Date(),
-              });
+              await atualizarStatus(agendamento.id, 'confirmado');
 
               const clienteTelefone = agendamento.clienteTelefone;
               if (clienteTelefone) {
@@ -170,9 +131,8 @@ export default function BarbeiroHome({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
-                status: 'cancelado',
-                cancelledAt: new Date(),
+              await atualizarStatus(agendamento.id, 'cancelado', {
+                cancelledBy: 'barbeiro',
               });
 
               await liberarSlot(
@@ -224,10 +184,7 @@ export default function BarbeiroHome({ navigation }) {
           text: 'Concluir',
           onPress: async () => {
             try {
-              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
-                status: 'concluido',
-                concludedAt: new Date(),
-              });
+              await atualizarStatus(agendamento.id, 'concluido');
               Alert.alert('Sucesso!', 'Atendimento marcado como concluído.');
               await fetchAgendamentos();
             } catch (error) {
@@ -267,7 +224,7 @@ export default function BarbeiroHome({ navigation }) {
           📅 {item.data} às {item.horario}
         </Text>
         <Text style={s.agendamentoServico}>
-          ✂️ {item.servico || 'Corte e barba'} · R$ {item.preco || '25,00'}
+          ✂️ {item.servico || 'Corte e barba'} · {formatPreco(item)}
         </Text>
         <Text style={s.agendamentoCreated}>
           Solicitado em: {formatDateTime(item.createdAt)}
@@ -319,10 +276,10 @@ export default function BarbeiroHome({ navigation }) {
   );
 
   if (loading) {
+    // Skeleton loading (item 17)
     return (
-      <SafeAreaView style={s.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={s.loadingText}>Carregando agendamentos...</Text>
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        <SkeletonList count={4} />
       </SafeAreaView>
     );
   }

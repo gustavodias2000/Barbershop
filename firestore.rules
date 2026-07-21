@@ -29,7 +29,8 @@ service cloud.firestore {
       // Impede o usuário de trocar o próprio "tipo" (anti-escalonamento de privilégio)
       allow update: if isOwner(uid)
                     && request.resource.data.tipo == resource.data.tipo;
-      allow delete: if false;
+      // LGPD (direito de exclusão): o titular pode apagar o próprio perfil
+      allow delete: if isOwner(uid);
     }
 
     // ---- Barbeiros (vitrine pública para clientes logados) ----
@@ -40,16 +41,20 @@ service cloud.firestore {
     }
 
     // ---- Agendamentos (PRIVADOS: só o cliente dono ou o barbeiro dono) ----
+    // Item 9.3: identidade primária por clienteUid (imutável).
+    // O email é mantido apenas como fallback para docs antigos.
     match /agendamentos/{id} {
       allow read: if isSignedIn()
-        && (resource.data.cliente == request.auth.token.email
+        && (resource.data.clienteUid == request.auth.uid
+            || resource.data.cliente == request.auth.token.email
             || resource.data.barbeiroId == request.auth.uid);
 
       allow create: if isSignedIn()
         && request.resource.data.clienteUid == request.auth.uid;
 
       allow update: if isSignedIn()
-        && (resource.data.cliente == request.auth.token.email
+        && (resource.data.clienteUid == request.auth.uid
+            || resource.data.cliente == request.auth.token.email
             || resource.data.barbeiroId == request.auth.uid);
 
       allow delete: if isSignedIn()

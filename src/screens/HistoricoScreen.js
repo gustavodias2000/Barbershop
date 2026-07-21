@@ -4,30 +4,24 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
   Alert,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { db, auth } from '../../firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  updateDoc,
-  doc,
-  limit,
-} from 'firebase/firestore';
+import { auth } from '../../firebase';
 import WhatsAppService from '../services/WhatsAppService';
 import RatingComponent from '../components/RatingComponent';
 import { liberarSlot } from '../services/OcupacaoService';
-import { formatDateTime } from '../utils/dateUtils';
+import {
+  listarDoCliente,
+  atualizarStatus,
+} from '../data/repositories/AgendamentoRepository';
+import { formatDateTime, formatPreco } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
+import { SkeletonList } from '../components/Skeleton';
 
 const FILTROS = [
   { key: 'todos',     label: 'Todos' },
@@ -54,29 +48,10 @@ export default function HistoricoScreen({ navigation }) {
 
   const fetchAgendamentos = async () => {
     try {
-      const userEmail = auth.currentUser?.email;
-      if (!userEmail) return;
-
-      let q;
-      if (filtro === 'todos') {
-        q = query(
-          collection(db, 'agendamentos'),
-          where('cliente', '==', userEmail),
-          orderBy('createdAt', 'desc'),
-          limit(50),
-        );
-      } else {
-        q = query(
-          collection(db, 'agendamentos'),
-          where('cliente', '==', userEmail),
-          where('status', '==', filtro),
-          orderBy('createdAt', 'desc'),
-          limit(50),
-        );
-      }
-
-      const snap = await getDocs(q);
-      setAgendamentos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      // Item 9.3: identidade por uid (imutável), não mais por email
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+      setAgendamentos(await listarDoCliente(uid, { status: filtro, max: 50 }));
     } catch (error) {
       console.error('Erro ao buscar histórico:', error);
       Alert.alert('Erro', 'Não foi possível carregar o histórico.');
@@ -107,9 +82,7 @@ export default function HistoricoScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await updateDoc(doc(db, 'agendamentos', agendamento.id), {
-                status: 'cancelado',
-                cancelledAt: new Date(),
+              await atualizarStatus(agendamento.id, 'cancelado', {
                 cancelledBy: 'cliente',
               });
 
@@ -167,7 +140,7 @@ export default function HistoricoScreen({ navigation }) {
         <Text style={s.dataHorario}>
           📅 {item.data} às {item.horario}
         </Text>
-        <Text style={s.preco}>💰 R$ {item.preco || '25,00'}</Text>
+        <Text style={s.preco}>💰 {formatPreco(item)}</Text>
         <Text style={s.criadoEm}>
           Criado em: {formatDateTime(item.createdAt)}
         </Text>
@@ -255,10 +228,10 @@ export default function HistoricoScreen({ navigation }) {
   );
 
   if (loading) {
+    // Skeleton loading (item 17)
     return (
-      <SafeAreaView style={s.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={s.loadingText}>Carregando histórico...</Text>
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        <SkeletonList count={4} />
       </SafeAreaView>
     );
   }

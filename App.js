@@ -12,6 +12,7 @@ import AgendamentoScreen from './src/screens/AgendamentoScreen';
 import HistoricoScreen from './src/screens/HistoricoScreen';
 import PaymentScreen from './src/screens/PaymentScreen';
 import PerfilScreen from './src/screens/PerfilScreen';
+import PrivacidadeScreen from './src/screens/PrivacidadeScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -83,6 +84,11 @@ export default function App() {
             name="Perfil"
             component={PerfilScreen}
             options={{ title: 'Meu Perfil' }}
+          />
+          <Stack.Screen
+            name="Privacidade"
+            component={PrivacidadeScreen}
+            options={{ title: 'Política de Privacidade' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

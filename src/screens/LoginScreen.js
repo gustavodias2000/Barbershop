@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../../firebase';
+import { auth } from '../../firebase';
+import { getProfile } from '../data/repositories/UsuarioRepository';
 import { useTheme } from '../context/ThemeContext';
 
 export default function LoginScreen({ navigation }) {
@@ -52,20 +52,11 @@ export default function LoginScreen({ navigation }) {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), senha);
       const uid = userCredential.user.uid;
 
-      const userDoc = await getDoc(doc(db, 'usuarios', uid));
+      const userData = await getProfile(uid);
 
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        if (userData.tipo === 'barbeiro') {
-          navigation.replace('Barbeiro');
-        } else {
-          navigation.replace('Cliente');
-        }
-      } else {
-        const emailUser = userCredential.user.email || '';
-        const tipo = emailUser.toLowerCase().includes('barbeiro') ? 'barbeiro' : 'cliente';
-        navigation.replace(tipo === 'barbeiro' ? 'Barbeiro' : 'Cliente');
-      }
+      // Item 8.5: sem perfil no banco, o fallback é SEMPRE cliente.
+      // (Antes o role era inferido pelo texto do email — inseguro.)
+      navigation.replace(userData?.tipo === 'barbeiro' ? 'Barbeiro' : 'Cliente');
     } catch (error) {
       console.error('Erro no login:', error);
       let errorMessage = 'Erro ao fazer login. Tente novamente.';

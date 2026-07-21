@@ -12,9 +12,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../../firebase';
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { serverTimestamp } from 'firebase/firestore';
+import { auth } from '../../firebase';
+import { createProfile } from '../data/repositories/UsuarioRepository';
+import { upsertBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { maskPhone, formatPhoneToE164, precoParaCentavos } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
 
@@ -30,6 +32,7 @@ export default function RegisterScreen({ navigation }) {
   const [tipo, setTipo] = useState('cliente');
   const [especialidade, setEspecialidade] = useState('');
   const [preco, setPreco] = useState('');
+  const [aceitouPolitica, setAceitouPolitica] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -57,6 +60,10 @@ export default function RegisterScreen({ navigation }) {
     if (senha !== confirmarSenha) {
       newErrors.confirmarSenha = 'Senhas não conferem';
     }
+    // LGPD: consentimento explícito é obrigatório para tratar dados pessoais
+    if (!aceitouPolitica) {
+      newErrors.politica = 'É necessário aceitar a Política de Privacidade';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -75,32 +82,44 @@ export default function RegisterScreen({ navigation }) {
 
       const telefoneE164 = formatPhoneToE164(telefone);
 
-      await setDoc(doc(db, 'usuarios', uid), {
-        uid,
+      await createProfile(uid, {
         nome: nome.trim(),
         email: email.trim().toLowerCase(),
         telefone: telefoneE164,
         tipo,
-        createdAt: serverTimestamp(),
+        // LGPD: registra o consentimento com carimbo do servidor
+        consentimentoLGPD: true,
+        consentimentoEm: serverTimestamp(),
       });
+
+      // Item 13: dispara o email de verificação (não bloqueia o fluxo)
+      sendEmailVerification(userCredential.user).catch(() => {});
 
       // CORRIGIDO (item 3): barbeiro também aparece na vitrine para os clientes
       if (tipo === 'barbeiro') {
         const precoDisplay = preco.trim() || '25,00';
-        await setDoc(doc(db, 'barbeiros', uid), {
-          id: uid,
-          uid,
+        await upsertBarbeiro(uid, {
           nome: nome.trim(),
           telefone: telefoneE164,
           especialidade: especialidade.trim() || 'Corte e barba',
           preco: precoDisplay,                          // mantido p/ compatibilidade
           precoEmCentavos: precoParaCentavos(precoDisplay), // novo campo numérico
-          createdAt: serverTimestamp(),
         });
-        navigation.replace('Barbeiro');
-      } else {
-        navigation.replace('Cliente');
       }
+
+      Alert.alert(
+        'Conta criada!',
+        'Enviamos um email de verificação para ' +
+          email.trim() +
+          '. Confirme quando puder — você já pode usar o app.',
+        [
+          {
+            text: 'OK',
+            onPress: () =>
+              navigation.replace(tipo === 'barbeiro' ? 'Barbeiro' : 'Cliente'),
+          },
+        ],
+      );
     } catch (error) {
       console.error('Erro no cadastro:', error);
       let errorMessage = 'Erro ao criar conta. Tente novamente.';
@@ -292,6 +311,35 @@ export default function RegisterScreen({ navigation }) {
               ) : null}
             </View>
 
+            {/* Consentimento LGPD */}
+            <TouchableOpacity
+              style={s.consentRow}
+              accessibilityRole="checkbox"
+              accessibilityLabel="Li e aceito a Política de Privacidade"
+              accessibilityState={{ checked: aceitouPolitica }}
+              onPress={() => {
+                setAceitouPolitica((v) => !v);
+                clearError('politica');
+              }}
+            >
+              <View style={[s.checkbox, aceitouPolitica && s.checkboxChecked]}>
+                {aceitouPolitica ? <Text style={s.checkboxMark}>✓</Text> : null}
+              </View>
+              <Text style={s.consentText}>
+                Li e aceito a{' '}
+                <Text
+                  style={s.consentLink}
+                  onPress={() => navigation.navigate('Privacidade')}
+                >
+                  Política de Privacidade
+                </Text>{' '}
+                e o tratamento dos meus dados conforme a LGPD.
+              </Text>
+            </TouchableOpacity>
+            {errors.politica ? (
+              <Text style={s.errorText}>{errors.politica}</Text>
+            ) : null}
+
             <TouchableOpacity
               style={[s.button, loading && s.buttonDisabled]}
               accessibilityRole="button"
@@ -417,6 +465,45 @@ const getStyles = (theme) => StyleSheet.create({
     color: theme.colors.error,
     fontSize: 13,
     marginTop: 4,
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 4,
+    marginBottom: 4,
+    minHeight: 44,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceVariant,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    marginTop: 2,
+  },
+  checkboxChecked: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  checkboxMark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: theme.colors.textSecondary,
+  },
+  consentLink: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   button: {
     backgroundColor: theme.colors.primary,

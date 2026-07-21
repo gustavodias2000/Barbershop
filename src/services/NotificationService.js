@@ -12,6 +12,8 @@
  */
 import messaging from '@react-native-firebase/messaging';
 import { Alert } from 'react-native';
+import { auth } from '../../firebase';
+import { saveFcmToken } from '../data/repositories/UsuarioRepository';
 
 class NotificationService {
   constructor() {
@@ -34,6 +36,7 @@ class NotificationService {
     if (enabled) {
       await this.getFCMToken();
       this._setupForegroundListener();
+      this._setupTokenRefreshListener();
     }
 
     return enabled;
@@ -68,12 +71,27 @@ class NotificationService {
   async getFCMToken() {
     try {
       const token = await messaging().getToken();
-      // Em produção: salvar token em usuarios/{uid}.fcmToken via Firestore
+      // Item 18: salva o token no perfil — os lembretes automáticos
+      // (Cloud Function agendada) usam este campo para enviar o push.
+      const uid = auth.currentUser?.uid;
+      if (uid && token) {
+        await saveFcmToken(uid, token);
+      }
       return token;
     } catch (error) {
       console.error('Erro ao obter FCM token:', error);
       return null;
     }
+  }
+
+  _setupTokenRefreshListener() {
+    // O FCM pode girar o token; mantém o perfil sempre atualizado
+    messaging().onTokenRefresh((token) => {
+      const uid = auth.currentUser?.uid;
+      if (uid && token) {
+        saveFcmToken(uid, token);
+      }
+    });
   }
 
   _handleNotificationNavigation(remoteMessage) {

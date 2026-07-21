@@ -1,0 +1,34 @@
+# CI — Barbershop (item 19 da auditoria)
+# Roda testes e auditoria de dependências a cada push/PR na master.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    name: Testes + Auditoria
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --legacy-peer-deps
+
+      - name: Testes unitários
+        run: npm test -- --ci --passWithNoTests
+
+      - name: Auditoria de dependências (informativo)
+        # Não quebra o build: serve como alerta contínuo de vulnerabilidades
+        run: npm audit --audit-level=high || true

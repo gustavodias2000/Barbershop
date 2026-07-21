@@ -9,18 +9,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { db, auth } from '../../firebase';
-import {
-  collection,
-  addDoc,
-  doc,
-  getDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { auth } from '../../firebase';
 import WhatsAppService from '../services/WhatsAppService';
 import PaymentModal from '../components/PaymentModal';
 import CalendarService from '../services/CalendarService';
 import { getHorariosOcupados, marcarOcupado } from '../services/OcupacaoService';
+import { criarAgendamento } from '../data/repositories/AgendamentoRepository';
+import useUserProfile from '../hooks/useUserProfile';
 import { getNextDays, formatPreco, precoParaCentavos, toLocalDateString } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
 
@@ -29,6 +24,7 @@ export default function AgendamentoScreen({ route, navigation }) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
+  const { profile: userProfile } = useUserProfile();
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [availableTimes, setAvailableTimes] = useState([]);
@@ -36,7 +32,6 @@ export default function AgendamentoScreen({ route, navigation }) {
   const [loadingHorarios, setLoadingHorarios] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [createdAgendamento, setCreatedAgendamento] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
 
   const horariosPadrao = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -50,23 +45,8 @@ export default function AgendamentoScreen({ route, navigation }) {
   const todayStr = toLocalDateString(new Date());
 
   useEffect(() => {
-    fetchUserProfile();
-  }, []);
-
-  useEffect(() => {
     if (selectedDate) fetchHorariosOcupados();
   }, [selectedDate]);
-
-  const fetchUserProfile = async () => {
-    try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      const userDoc = await getDoc(doc(db, 'usuarios', uid));
-      if (userDoc.exists()) setUserProfile(userDoc.data());
-    } catch (error) {
-      console.error('Erro ao buscar perfil:', error);
-    }
-  };
 
   /**
    * Retorna true se o horário já passou (com buffer de 30 min para agendamento no dia).
@@ -128,7 +108,6 @@ export default function AgendamentoScreen({ route, navigation }) {
         clienteNome,
         clienteTelefone,
         status: 'pendente',
-        createdAt: serverTimestamp(),
         data: selectedDate,
         horario: selectedTime,
         servico: barbeiro.especialidade || 'Corte e barba',
@@ -136,7 +115,7 @@ export default function AgendamentoScreen({ route, navigation }) {
         precoEmCentavos,               // novo campo numérico em centavos
       };
 
-      await addDoc(collection(db, 'agendamentos'), novoAgendamento);
+      await criarAgendamento(novoAgendamento);
       await marcarOcupado(barbeiro.id, selectedDate, selectedTime);
 
       setCreatedAgendamento(novoAgendamento);
