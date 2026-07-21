@@ -15,21 +15,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../firebase';
 import { getProfile } from '../data/repositories/UsuarioRepository';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../types';
 
-export default function LoginScreen({ navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
+
+interface FormErrors {
+  email?: string | null;
+  senha?: string | null;
+}
+
+export default function LoginScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
-  const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   const validateForm = () => {
-    const newErrors = {};
+    const newErrors: FormErrors = {};
     if (!email.trim()) {
       newErrors.email = 'Email é obrigatório';
     } else if (!validateEmail(email.trim())) {
@@ -57,7 +66,7 @@ export default function LoginScreen({ navigation }) {
       // Item 8.5: sem perfil no banco, o fallback é SEMPRE cliente.
       // (Antes o role era inferido pelo texto do email — inseguro.)
       navigation.replace(userData?.tipo === 'barbeiro' ? 'Barbeiro' : 'Cliente');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro no login:', error);
       let errorMessage = 'Erro ao fazer login. Tente novamente.';
 
@@ -115,7 +124,7 @@ export default function LoginScreen({ navigation }) {
                 'Email enviado!',
                 'Verifique sua caixa de entrada e spam para redefinir sua senha.',
               );
-            } catch (error) {
+            } catch (error: any) {
               console.error('Erro ao enviar reset:', error);
               let msg = 'Não foi possível enviar o email de recuperação.';
               if (error.code === 'auth/user-not-found') {
@@ -129,7 +138,7 @@ export default function LoginScreen({ navigation }) {
     );
   };
 
-  const clearError = (field) => {
+  const clearError = (field: keyof FormErrors) => {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
   };
 
@@ -228,7 +237,7 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background,

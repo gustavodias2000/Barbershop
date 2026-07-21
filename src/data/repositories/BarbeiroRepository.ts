@@ -13,20 +13,24 @@ import {
   limit,
   serverTimestamp,
 } from 'firebase/firestore';
+import type { Barbeiro } from '../../types';
 
 /**
  * Lista os barbeiros disponíveis (paginado).
  */
-export async function listarBarbeiros(max = 50) {
+export async function listarBarbeiros(max: number = 50): Promise<Barbeiro[]> {
   const q = query(collection(db, 'barbeiros'), limit(max));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<Barbeiro, 'id'>), id: d.id }));
 }
 
 /**
  * Cria/atualiza a entrada do barbeiro na vitrine (id do doc == uid).
  */
-export async function upsertBarbeiro(uid, data) {
+export async function upsertBarbeiro(
+  uid: string,
+  data: Partial<Omit<Barbeiro, 'id' | 'uid'>>,
+): Promise<void> {
   await setDoc(
     doc(db, 'barbeiros', uid),
     { id: uid, uid, ...data, updatedAt: serverTimestamp() },
@@ -37,10 +41,10 @@ export async function upsertBarbeiro(uid, data) {
 /**
  * Remove o barbeiro da vitrine (usado na exclusão de conta — LGPD).
  */
-export async function removerBarbeiro(uid) {
+export async function removerBarbeiro(uid: string): Promise<void> {
   try {
     await deleteDoc(doc(db, 'barbeiros', uid));
-  } catch (error) {
+  } catch (error: any) {
     console.warn('Não foi possível remover da vitrine:', error?.message);
   }
 }

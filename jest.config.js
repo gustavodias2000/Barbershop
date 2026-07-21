@@ -5,8 +5,10 @@ module.exports = {
     '^.+\\.[jt]sx?$': 'babel-jest'
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|@react-navigation|@stripe)/)'
+    'node_modules/(?!(react-native|@react-native|@react-navigation)/)'
   ],
+  // e2e/ usa Detox (precisa de device real/emulador) — não roda no Jest unitário
+  testPathIgnorePatterns: ['/node_modules/', '/e2e/'],
   moduleFileExtensions: ['ts','tsx','js','jsx','json','node'],
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',

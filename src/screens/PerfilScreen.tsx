@@ -25,18 +25,27 @@ import {
   deleteProfile,
 } from '../data/repositories/UsuarioRepository';
 import { upsertBarbeiro, removerBarbeiro } from '../data/repositories/BarbeiroRepository';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
 import ThemeSelector from '../components/ThemeSelector';
 import { maskPhone, formatPhoneToE164 } from '../utils/dateUtils';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList, Usuario } from '../types';
 
-export default function PerfilScreen({ navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, 'Perfil'>;
+
+interface FormErrors {
+  nome?: string | null;
+  telefone?: string | null;
+}
+
+export default function PerfilScreen({ navigation }: Props) {
   const { theme } = useTheme();
-  const [userData, setUserData] = useState(null);
+  const [userData, setUserData] = useState<Usuario | null>(null);
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
   // Para troca de senha
   const [senhaAtual, setSenhaAtual] = useState('');
@@ -79,7 +88,7 @@ export default function PerfilScreen({ navigation }) {
   };
 
   const validateProfile = () => {
-    const newErrors = {};
+    const newErrors: FormErrors = {};
     if (!nome.trim() || nome.trim().length < 3) {
       newErrors.nome = 'Nome deve ter pelo menos 3 caracteres';
     }
@@ -97,6 +106,7 @@ export default function PerfilScreen({ navigation }) {
     setSaving(true);
     try {
       const uid = auth.currentUser?.uid;
+      if (!uid) return;
       const telefoneE164 = formatPhoneToE164(telefone);
 
       await updateProfile(uid, {
@@ -139,6 +149,7 @@ export default function PerfilScreen({ navigation }) {
     setChangingPassword(true);
     try {
       const user = auth.currentUser;
+      if (!user?.email) return;
       const credential = EmailAuthProvider.credential(user.email, senhaAtual);
 
       // Reautenticar antes de trocar a senha
@@ -150,7 +161,7 @@ export default function PerfilScreen({ navigation }) {
       setNovaSenha('');
       setConfirmarNovaSenha('');
       setShowPasswordSection(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao trocar senha:', error);
       let msg = 'Não foi possível alterar a senha.';
       if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
@@ -163,14 +174,16 @@ export default function PerfilScreen({ navigation }) {
   };
 
   const handleResendVerification = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
     setResendingVerification(true);
     try {
-      await sendEmailVerification(auth.currentUser);
+      await sendEmailVerification(user);
       Alert.alert(
         'Email enviado',
         'Verifique sua caixa de entrada (e o spam) e clique no link de confirmação.',
       );
-    } catch (error) {
+    } catch (error: any) {
       let msg = 'Não foi possível enviar o email. Tente novamente mais tarde.';
       if (error.code === 'auth/too-many-requests') {
         msg = 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
@@ -203,6 +216,7 @@ export default function PerfilScreen({ navigation }) {
             setDeleting(true);
             try {
               const user = auth.currentUser;
+              if (!user?.email) return;
               const uid = user.uid;
 
               // 1. Reautentica (o Firebase exige login recente para excluir)
@@ -226,7 +240,7 @@ export default function PerfilScreen({ navigation }) {
                 'Sua conta e seus dados pessoais foram removidos.',
                 [{ text: 'OK', onPress: () => navigation.replace('Login') }],
               );
-            } catch (error) {
+            } catch (error: any) {
               console.error('Erro ao excluir conta:', error);
               let msg = 'Não foi possível excluir a conta. Tente novamente.';
               if (

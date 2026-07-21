@@ -8,7 +8,7 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
 
 const SECOES = [
   {
@@ -96,7 +96,7 @@ export default function PrivacidadeScreen() {
   );
 }
 
-const getStyles = (theme) =>
+const getStyles = (theme: Theme) =>
   StyleSheet.create({
     container: {
       flex: 1,

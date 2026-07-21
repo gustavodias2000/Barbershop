@@ -7,12 +7,16 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
 import PaymentService from '../services/PaymentService';
 import { precoParaCentavos } from '../utils/dateUtils';
 import { atualizarStatus } from '../data/repositories/AgendamentoRepository';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../types';
 
-export default function PaymentScreen({ route, navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, 'Payment'>;
+
+export default function PaymentScreen({ route, navigation }: Props) {
   const { agendamento } = route.params;
   const { theme } = useTheme();
   const styles = createStyles(theme);
@@ -117,7 +121,7 @@ export default function PaymentScreen({ route, navigation }) {
   );
 }
 
-const createStyles = (theme) => StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,

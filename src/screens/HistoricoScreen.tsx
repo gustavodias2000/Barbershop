@@ -19,11 +19,21 @@ import {
   atualizarStatus,
 } from '../data/repositories/AgendamentoRepository';
 import { formatDateTime, formatPreco } from '../utils/dateUtils';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { SkeletonList } from '../components/Skeleton';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList, Agendamento, StatusAgendamento } from '../types';
 
-const FILTROS = [
+type Props = NativeStackScreenProps<RootStackParamList, 'Historico'>;
+type Filtro = StatusAgendamento | 'todos';
+
+interface FiltroOption {
+  key: Filtro;
+  label: string;
+}
+
+const FILTROS: FiltroOption[] = [
   { key: 'todos',     label: 'Todos' },
   { key: 'pendente',  label: 'Pendentes' },
   { key: 'confirmado',label: 'Confirmados' },
@@ -31,16 +41,16 @@ const FILTROS = [
   { key: 'cancelado', label: 'Cancelados' },
 ];
 
-export default function HistoricoScreen({ navigation }) {
+export default function HistoricoScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
-  const [agendamentos, setAgendamentos] = useState([]);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filtro, setFiltro] = useState('todos');
+  const [filtro, setFiltro] = useState<Filtro>('todos');
   const [showRating, setShowRating] = useState(false);
-  const [selectedAgendamento, setSelectedAgendamento] = useState(null);
+  const [selectedAgendamento, setSelectedAgendamento] = useState<Agendamento | null>(null);
 
   useEffect(() => {
     fetchAgendamentos();
@@ -71,7 +81,7 @@ export default function HistoricoScreen({ navigation }) {
     }
   };
 
-  const cancelarAgendamento = async (agendamento) => {
+  const cancelarAgendamento = async (agendamento: Agendamento) => {
     Alert.alert(
       'Cancelar Agendamento',
       'Tem certeza que deseja cancelar este agendamento?',
@@ -110,7 +120,7 @@ export default function HistoricoScreen({ navigation }) {
     );
   };
 
-  const reagendar = (agendamento) => {
+  const reagendar = (agendamento: Agendamento) => {
     const barbeiro = {
       id: agendamento.barbeiroId,
       nome: agendamento.barbeiroNome,
@@ -121,7 +131,7 @@ export default function HistoricoScreen({ navigation }) {
     navigation.navigate('Agendamento', { barbeiro });
   };
 
-  const renderAgendamento = ({ item }) => (
+  const renderAgendamento = ({ item }: { item: Agendamento }) => (
     <View style={s.agendamentoCard}>
       <View style={s.cardHeader}>
         <View style={s.barbeiroInfo}>
@@ -283,7 +293,7 @@ export default function HistoricoScreen({ navigation }) {
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,

@@ -11,13 +11,25 @@ import {
 import { db, auth } from '../../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { atualizarStatus } from '../data/repositories/AgendamentoRepository';
+import type { Agendamento } from '../types';
 
-export default function RatingComponent({ visible, onClose, agendamento }) {
+interface RatingComponentProps {
+  visible: boolean;
+  onClose: () => void;
+  agendamento: Agendamento | null;
+}
+
+export default function RatingComponent({
+  visible,
+  onClose,
+  agendamento,
+}: RatingComponentProps) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
 
   const submitRating = async () => {
+    if (!agendamento) return;
     if (rating === 0) {
       Alert.alert('Erro', 'Por favor, selecione uma avaliação.');
       return;

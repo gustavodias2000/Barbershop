@@ -4,16 +4,30 @@
  * Para integrar o Stripe no futuro, configure as chaves reais e
  * reinstale @stripe/stripe-react-native.
  */
+import type { Agendamento } from '../types';
+
+export interface PaymentResult {
+  success: boolean;
+  amount: number;
+  paymentMethod: 'presential';
+}
+
+export interface PaymentValidation {
+  isValid: boolean;
+  errors: string[];
+}
+
 class PaymentService {
-  constructor() {
-    this.isInitialized = true;
-  }
+  readonly isInitialized = true;
 
   /**
    * Confirma agendamento sem processar pagamento online.
    * O cliente paga presencialmente (dinheiro, PIX, cartão na maquininha).
    */
-  async processPayment(agendamento, amount) {
+  async processPayment(
+    _agendamento: Partial<Agendamento> | null,
+    amount: number,
+  ): Promise<PaymentResult> {
     return {
       success: true,
       amount: amount / 100,
@@ -21,14 +35,14 @@ class PaymentService {
     };
   }
 
-  validateConfiguration() {
+  validateConfiguration(): PaymentValidation {
     return { isValid: true, errors: [] };
   }
 
   /**
    * Formata valor em centavos para exibição em BRL.
    */
-  formatCurrency(amountInCents) {
+  formatCurrency(amountInCents: number): string {
     const amount = amountInCents / 100;
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -39,7 +53,7 @@ class PaymentService {
   /**
    * Converte valor em reais para centavos.
    */
-  convertToCents(amountInReais) {
+  convertToCents(amountInReais: number): number {
     return Math.round(amountInReais * 100);
   }
 }

@@ -1,13 +1,29 @@
 /**
  * Utilitários de formatação de data e moeda compartilhados entre telas.
  */
+import type { Timestamp, FieldValue } from 'firebase/firestore';
+
+/** Valor de data aceito pelos formatadores: Timestamp do Firestore, Date ou string */
+type DateLike = Timestamp | FieldValue | Date | string | number | null | undefined;
+
+interface ComPreco {
+  precoEmCentavos?: number;
+  preco?: string;
+}
+
+export interface DiaDisponivel {
+  /** YYYY-MM-DD local */
+  date: string;
+  /** ex.: "seg., 21/07" */
+  display: string;
+}
 
 // ─── Moeda ────────────────────────────────────────────────────────────────────
 
 /**
  * Converte preço legado (string "25,00") ou número (reais) para centavos inteiros.
  */
-export const precoParaCentavos = (preco) => {
+export const precoParaCentavos = (preco?: string | number | null): number => {
   if (typeof preco === 'number') return Math.round(preco * 100);
   if (typeof preco === 'string') {
     return Math.round(parseFloat(preco.replace(',', '.') || '0') * 100);
@@ -19,7 +35,7 @@ export const precoParaCentavos = (preco) => {
  * Formata centavos para exibição em BRL.
  * Ex.: formatMoney(2500) → "R$ 25,00"
  */
-export const formatMoney = (centavos) => {
+export const formatMoney = (centavos?: number | null): string => {
   const value = typeof centavos === 'number' ? centavos / 100 : 0;
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
@@ -28,55 +44,56 @@ export const formatMoney = (centavos) => {
  * Retorna o preço formatado de um documento barbeiro/agendamento.
  * Aceita tanto o campo novo (precoEmCentavos: int) quanto o legado (preco: string).
  */
-export const formatPreco = (doc) => {
+export const formatPreco = (doc?: ComPreco | null): string => {
   if (doc?.precoEmCentavos != null) return formatMoney(doc.precoEmCentavos);
   if (doc?.preco) return `R$ ${doc.preco}`;
   return 'R$ 25,00';
 };
 
+// ─── Datas ────────────────────────────────────────────────────────────────────
+
+const toDateObj = (date: DateLike): Date | null => {
+  if (!date) return null;
+  try {
+    const dateObj =
+      typeof (date as Timestamp).toDate === 'function'
+        ? (date as Timestamp).toDate()
+        : new Date(date as string | number | Date);
+    return isNaN(dateObj.getTime()) ? null : dateObj;
+  } catch {
+    return null;
+  }
+};
+
 /**
  * Formata uma data (Firestore Timestamp ou Date) para dd/mm/aaaa
  */
-export const formatDate = (date) => {
-  if (!date) return 'Data não disponível';
-  try {
-    const dateObj = date.toDate ? date.toDate() : new Date(date);
-    if (isNaN(dateObj.getTime())) return 'Data inválida';
-    return dateObj.toLocaleDateString('pt-BR');
-  } catch {
-    return 'Data inválida';
-  }
+export const formatDate = (date: DateLike): string => {
+  const dateObj = toDateObj(date);
+  if (!dateObj) return date ? 'Data inválida' : 'Data não disponível';
+  return dateObj.toLocaleDateString('pt-BR');
 };
 
 /**
  * Formata uma data com hora: dd/mm/aaaa às HH:mm
  */
-export const formatDateTime = (date) => {
-  if (!date) return 'Data não disponível';
-  try {
-    const dateObj = date.toDate ? date.toDate() : new Date(date);
-    if (isNaN(dateObj.getTime())) return 'Data inválida';
-    const datePart = dateObj.toLocaleDateString('pt-BR');
-    const timePart = dateObj.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    return `${datePart} às ${timePart}`;
-  } catch {
-    return 'Data inválida';
-  }
+export const formatDateTime = (date: DateLike): string => {
+  const dateObj = toDateObj(date);
+  if (!dateObj) return date ? 'Data inválida' : 'Data não disponível';
+  const datePart = dateObj.toLocaleDateString('pt-BR');
+  const timePart = dateObj.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `${datePart} às ${timePart}`;
 };
 
-/**
- * Retorna os próximos N dias úteis (sem domingos), com display formatado.
- * @param {number} qtd - Quantidade de dias (padrão 7)
- */
 /**
  * Formata uma Date em YYYY-MM-DD usando a data LOCAL (não UTC).
  * Evita o bug de timezone onde toISOString() pode retornar o dia anterior
  * em fusos negativos (ex.: BRT = UTC-3).
  */
-export const toLocalDateString = (date) => {
+export const toLocalDateString = (date: Date): string => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
@@ -86,10 +103,9 @@ export const toLocalDateString = (date) => {
 /**
  * Retorna os próximos N dias úteis (sem domingos), com display formatado.
  * Usa data local para evitar bug de timezone com toISOString().
- * @param {number} qtd - Quantidade de dias (padrão 7)
  */
-export const getNextDays = (qtd = 7) => {
-  const days = [];
+export const getNextDays = (qtd: number = 7): DiaDisponivel[] => {
+  const days: DiaDisponivel[] = [];
   const today = new Date();
   let count = 0;
   let i = 0;
@@ -113,12 +129,13 @@ export const getNextDays = (qtd = 7) => {
   return days;
 };
 
+// ─── Telefone ─────────────────────────────────────────────────────────────────
+
 /**
  * Formata número de telefone para padrão internacional brasileiro
- * @param {string} phone - Telefone raw (com ou sem formatação)
- * @returns {string} Telefone no formato 5511999999999
+ * @returns Telefone no formato 5511999999999
  */
-export const formatPhoneToE164 = (phone) => {
+export const formatPhoneToE164 = (phone?: string | null): string => {
   if (!phone) return '';
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('55') && digits.length >= 12) return digits;
@@ -128,9 +145,9 @@ export const formatPhoneToE164 = (phone) => {
 };
 
 /**
- * Mascara visual de telefone: (11) 99999-9999
+ * Máscara visual de telefone: (11) 99999-9999
  */
-export const maskPhone = (value) => {
+export const maskPhone = (value: string): string => {
   const digits = value.replace(/\D/g, '').slice(0, 11);
   if (digits.length <= 2) return digits;
   if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;

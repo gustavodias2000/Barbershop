@@ -17,29 +17,45 @@ import {
   updateDoc,
   limit,
   serverTimestamp,
+  type QueryConstraint,
 } from 'firebase/firestore';
+import type { Agendamento, NovoAgendamento, StatusAgendamento } from '../../types';
+
+interface ListarClienteOpts {
+  status?: StatusAgendamento | 'todos';
+  max?: number;
+}
+
+const fromSnap = (d: { id: string; data: () => unknown }): Agendamento => ({
+  ...(d.data() as Omit<Agendamento, 'id'>),
+  id: d.id,
+});
 
 /**
  * Lista agendamentos do cliente logado (por uid, não por email).
- * @param {string} clienteUid
- * @param {{ status?: string, max?: number }} opts
  */
-export async function listarDoCliente(clienteUid, { status, max = 50 } = {}) {
+export async function listarDoCliente(
+  clienteUid?: string | null,
+  { status, max = 50 }: ListarClienteOpts = {},
+): Promise<Agendamento[]> {
   if (!clienteUid) return [];
-  const filtros = [
+  const filtros: QueryConstraint[] = [
     where('clienteUid', '==', clienteUid),
     ...(status && status !== 'todos' ? [where('status', '==', status)] : []),
     orderBy('createdAt', 'desc'),
     limit(max),
   ];
   const snap = await getDocs(query(collection(db, 'agendamentos'), ...filtros));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs.map(fromSnap);
 }
 
 /**
  * Lista agendamentos do barbeiro logado.
  */
-export async function listarDoBarbeiro(barbeiroId, max = 50) {
+export async function listarDoBarbeiro(
+  barbeiroId?: string | null,
+  max: number = 50,
+): Promise<Agendamento[]> {
   if (!barbeiroId) return [];
   const snap = await getDocs(
     query(
@@ -49,13 +65,14 @@ export async function listarDoBarbeiro(barbeiroId, max = 50) {
       limit(max),
     ),
   );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs.map(fromSnap);
 }
 
 /**
  * Cria um novo agendamento. createdAt é sempre do servidor.
+ * @returns id do documento criado
  */
-export async function criarAgendamento(dados) {
+export async function criarAgendamento(dados: NovoAgendamento): Promise<string> {
   const docRef = await addDoc(collection(db, 'agendamentos'), {
     ...dados,
     createdAt: serverTimestamp(),
@@ -65,21 +82,22 @@ export async function criarAgendamento(dados) {
 
 /**
  * Atualiza o status de um agendamento com carimbo de tempo do servidor.
- * @param {string} id
- * @param {'confirmado'|'cancelado'|'concluido'|'avaliado'} status
- * @param {object} extras — campos adicionais (ex.: cancelledBy)
  */
-export async function atualizarStatus(id, status, extras = {}) {
-  const stampField = {
+export async function atualizarStatus(
+  id: string,
+  status: Exclude<StatusAgendamento, 'pendente'>,
+  extras: Record<string, unknown> = {},
+): Promise<void> {
+  const stampField: Record<Exclude<StatusAgendamento, 'pendente'>, string> = {
     confirmado: 'confirmedAt',
     cancelado: 'cancelledAt',
     concluido: 'concludedAt',
     avaliado: 'ratedAt',
-  }[status];
+  };
 
   await updateDoc(doc(db, 'agendamentos', id), {
     status,
-    ...(stampField ? { [stampField]: serverTimestamp() } : {}),
+    [stampField[status]]: serverTimestamp(),
     ...extras,
   });
 }

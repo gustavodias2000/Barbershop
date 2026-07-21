@@ -6,13 +6,32 @@
  * Sem dependências externas: usa apenas Animated do próprio React Native.
  */
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet } from 'react-native';
-import { useTheme } from '../context/ThemeContext';
+import {
+  View,
+  Animated,
+  StyleSheet,
+  type StyleProp,
+  type ViewStyle,
+  type DimensionValue,
+} from 'react-native';
+import { useTheme, type Theme } from '../context/ThemeContext';
+
+interface SkeletonBlockProps {
+  width?: DimensionValue;
+  height?: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+}
 
 /**
  * Bloco básico pulsante.
  */
-export function SkeletonBlock({ width = '100%', height = 16, radius = 6, style }) {
+export function SkeletonBlock({
+  width = '100%',
+  height = 16,
+  radius = 6,
+  style,
+}: SkeletonBlockProps) {
   const { theme } = useTheme();
   const opacity = useRef(new Animated.Value(0.4)).current;
 
@@ -57,11 +76,11 @@ export function SkeletonCard() {
         <SkeletonBlock width={50} height={50} radius={25} />
         <View style={s.lines}>
           <SkeletonBlock width="60%" height={16} />
-          <SkeletonBlock width="40%" height={12} style={{ marginTop: 8 }} />
-          <SkeletonBlock width="30%" height={12} style={{ marginTop: 8 }} />
+          <SkeletonBlock width="40%" height={12} style={styles.mt8} />
+          <SkeletonBlock width="30%" height={12} style={styles.mt8} />
         </View>
       </View>
-      <SkeletonBlock height={40} radius={8} style={{ marginTop: 14 }} />
+      <SkeletonBlock height={40} radius={8} style={styles.mt14} />
     </View>
   );
 }
@@ -69,7 +88,7 @@ export function SkeletonCard() {
 /**
  * Lista de N cards fantasmas — usada enquanto as telas carregam.
  */
-export function SkeletonList({ count = 4 }) {
+export function SkeletonList({ count = 4 }: { count?: number }) {
   return (
     <View accessibilityLabel="Carregando conteúdo" accessibilityRole="progressbar">
       {Array.from({ length: count }).map((_, i) => (
@@ -79,7 +98,12 @@ export function SkeletonList({ count = 4 }) {
   );
 }
 
-const getStyles = (theme) =>
+const styles = StyleSheet.create({
+  mt8: { marginTop: 8 },
+  mt14: { marginTop: 14 },
+});
+
+const getStyles = (theme: Theme) =>
   StyleSheet.create({
     card: {
       backgroundColor: theme.colors.surface,

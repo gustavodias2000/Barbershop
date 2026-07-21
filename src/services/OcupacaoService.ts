@@ -20,17 +20,21 @@ import {
   doc,
   serverTimestamp,
 } from 'firebase/firestore';
+import type { DataISO, Horario } from '../types';
 
 // ID determinístico do slot: evita duplicidade e facilita liberar depois.
 // Ex.: "abc123_2026-07-20_09-00"
-const slotId = (barbeiroId, data, horario) =>
+const slotId = (barbeiroId: string, data: DataISO, horario: Horario): string =>
   `${barbeiroId}_${data}_${String(horario).replace(':', '-')}`;
 
 /**
  * Retorna os horários já ocupados de um barbeiro numa data.
- * @returns {Promise<string[]>} ex.: ['09:00', '10:30']
+ * @returns ex.: ['09:00', '10:30']
  */
-export async function getHorariosOcupados(barbeiroId, data) {
+export async function getHorariosOcupados(
+  barbeiroId?: string | null,
+  data?: DataISO | null,
+): Promise<Horario[]> {
   if (!barbeiroId || !data) return [];
   const q = query(
     collection(db, 'ocupacoes'),
@@ -38,13 +42,17 @@ export async function getHorariosOcupados(barbeiroId, data) {
     where('data', '==', data),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data().horario);
+  return snap.docs.map((d) => (d.data() as { horario: Horario }).horario);
 }
 
 /**
  * Marca um horário como ocupado (ao criar um agendamento).
  */
-export async function marcarOcupado(barbeiroId, data, horario) {
+export async function marcarOcupado(
+  barbeiroId: string,
+  data: DataISO,
+  horario: Horario,
+): Promise<void> {
   await setDoc(doc(db, 'ocupacoes', slotId(barbeiroId, data, horario)), {
     barbeiroId,
     data,
@@ -57,11 +65,15 @@ export async function marcarOcupado(barbeiroId, data, horario) {
  * Libera um horário (ao cancelar um agendamento).
  * Silencioso: se o slot não existir, não faz nada.
  */
-export async function liberarSlot(barbeiroId, data, horario) {
+export async function liberarSlot(
+  barbeiroId?: string | null,
+  data?: DataISO | null,
+  horario?: Horario | null,
+): Promise<void> {
   if (!barbeiroId || !data || !horario) return;
   try {
     await deleteDoc(doc(db, 'ocupacoes', slotId(barbeiroId, data, horario)));
-  } catch (error) {
+  } catch (error: any) {
     console.warn('Não foi possível liberar o slot:', error?.message);
   }
 }

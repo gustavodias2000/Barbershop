@@ -8,11 +8,24 @@ import {
   ActivityIndicator,
   Alert
 } from 'react-native';
-import PaymentService from '../services/PaymentService';
+import PaymentService, { type PaymentResult } from '../services/PaymentService';
 import { precoParaCentavos } from '../utils/dateUtils';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
+import type { NovoAgendamento } from '../types';
 
-export default function PaymentModal({ visible, onClose, agendamento, onPaymentSuccess }) {
+interface PaymentModalProps {
+  visible: boolean;
+  onClose: () => void;
+  agendamento: NovoAgendamento | null;
+  onPaymentSuccess?: (result: PaymentResult) => void;
+}
+
+export default function PaymentModal({
+  visible,
+  onClose,
+  agendamento,
+  onPaymentSuccess,
+}: PaymentModalProps) {
   const [loading, setLoading] = useState(false);
   const { theme } = useTheme();
   const styles = createStyles(theme);
@@ -41,11 +54,8 @@ export default function PaymentModal({ visible, onClose, agendamento, onPaymentS
             }
           ]
         );
-      } else if (result.canceled) {
-        // Usuário cancelou o pagamento
-        console.log('Pagamento cancelado pelo usuário');
       } else {
-        Alert.alert('Erro', result.error || 'Erro no processamento do pagamento');
+        Alert.alert('Erro', 'Erro no processamento do pagamento');
       }
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível processar o pagamento');
@@ -146,7 +156,7 @@ export default function PaymentModal({ visible, onClose, agendamento, onPaymentS
   );
 }
 
-const createStyles = (theme) => StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

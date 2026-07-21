@@ -7,12 +7,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { auth } from '../../firebase';
 import { getProfile } from '../data/repositories/UsuarioRepository';
+import type { Usuario } from '../types';
 
-export default function useUserProfile() {
-  const [profile, setProfile] = useState(null);
+interface UseUserProfileResult {
+  profile: Usuario | null;
+  loading: boolean;
+  refresh: () => Promise<Usuario | null>;
+}
+
+export default function useUserProfile(): UseUserProfileResult {
+  const [profile, setProfile] = useState<Usuario | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<Usuario | null> => {
     try {
       const uid = auth.currentUser?.uid;
       if (!uid) {

@@ -14,18 +14,22 @@ import NotificationService from '../services/NotificationService';
 import { listarBarbeiros } from '../data/repositories/BarbeiroRepository';
 import { listarDoCliente } from '../data/repositories/AgendamentoRepository';
 import useUserProfile from '../hooks/useUserProfile';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { formatPreco } from '../utils/dateUtils';
 import { SkeletonList } from '../components/Skeleton';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList, Barbeiro, Agendamento } from '../types';
 
-export default function ClienteHome({ navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, 'Cliente'>;
+
+export default function ClienteHome({ navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
   const { profile: userProfile } = useUserProfile();
-  const [barbeiros, setBarbeiros] = useState([]);
-  const [agendamentos, setAgendamentos] = useState([]);
+  const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -75,7 +79,7 @@ export default function ClienteHome({ navigation }) {
     }
   };
 
-  const renderBarbeiro = ({ item }) => (
+  const renderBarbeiro = ({ item }: { item: Barbeiro }) => (
     <View style={s.barbeiroCard}>
       <View style={s.barbeiroInfo}>
         <View style={s.avatarContainer}>
@@ -102,7 +106,7 @@ export default function ClienteHome({ navigation }) {
     </View>
   );
 
-  const renderAgendamento = ({ item }) => (
+  const renderAgendamento = ({ item }: { item: Agendamento }) => (
     <View style={s.agendamentoCard}>
       <View style={s.agendamentoHeader}>
         <Text style={s.agendamentoBarbeiro}>{item.barbeiroNome}</Text>
@@ -223,7 +227,7 @@ export default function ClienteHome({ navigation }) {
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,

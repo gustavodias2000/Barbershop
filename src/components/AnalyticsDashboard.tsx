@@ -7,15 +7,44 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { db } from '../../firebase';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-import { useTheme } from '../context/ThemeContext';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  type Timestamp,
+} from 'firebase/firestore';
+import { useTheme, type Theme } from '../context/ThemeContext';
 import { formatMoney, precoParaCentavos } from '../utils/dateUtils';
+import type { Agendamento, Avaliacao } from '../types';
 
-export default function AnalyticsDashboard({ barbeiroId }) {
+interface HorarioPopular {
+  horario: string;
+  count: number;
+}
+
+interface AnalyticsData {
+  totalAgendamentos: number;
+  agendamentosHoje: number;
+  agendamentosSemana: number;
+  agendamentosMes: number;
+  avaliacaoMedia: number;
+  totalAvaliacoes: number;
+  faturamentoMesCentavos: number;
+  horariosPopulares: HorarioPopular[];
+}
+
+/** createdAt vem sempre como Timestamp nas leituras */
+const toDate = (ag: Agendamento): Date | undefined =>
+  (ag.createdAt as Timestamp | undefined)?.toDate?.();
+
+export default function AnalyticsDashboard({ barbeiroId }: { barbeiroId: string }) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
-  const [analytics, setAnalytics] = useState({
+  const [analytics, setAnalytics] = useState<AnalyticsData>({
     totalAgendamentos: 0,
     agendamentosHoje: 0,
     agendamentosSemana: 0,
@@ -56,12 +85,15 @@ export default function AnalyticsDashboard({ barbeiroId }) {
           limit(500),           // teto razoável; use Cloud Function em produção
         ),
       );
-      const agendamentos = agSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const agendamentos: Agendamento[] = agSnap.docs.map((d) => ({
+        ...(d.data() as Omit<Agendamento, 'id'>),
+        id: d.id,
+      }));
 
       const avSnap = await getDocs(
         query(collection(db, 'avaliacoes'), where('barbeiroId', '==', barbeiroId)),
       );
-      const avaliacoes = avSnap.docs.map((d) => d.data());
+      const avaliacoes = avSnap.docs.map((d) => d.data() as Avaliacao);
 
       const totalAgendamentos = agendamentos.length;
 
@@ -69,12 +101,12 @@ export default function AnalyticsDashboard({ barbeiroId }) {
       const agendamentosHoje = agendamentos.filter((ag) => ag.data === hojeStr).length;
 
       const agendamentosSemana = agendamentos.filter((ag) => {
-        const ts = ag.createdAt?.toDate?.();
+        const ts = toDate(ag);
         return ts && ts >= inicioSemana;
       }).length;
 
       const agendamentosMes = agendamentos.filter((ag) => {
-        const ts = ag.createdAt?.toDate?.();
+        const ts = toDate(ag);
         return ts && ts >= inicioMes;
       }).length;
 
@@ -87,7 +119,7 @@ export default function AnalyticsDashboard({ barbeiroId }) {
       const faturamentoMesCentavos = agendamentos
         .filter((ag) => {
           if (ag.status !== 'confirmado' && ag.status !== 'concluido') return false;
-          const ts = ag.createdAt?.toDate?.();
+          const ts = toDate(ag);
           return ts && ts >= inicioMes;
         })
         .reduce((sum, ag) => {
@@ -98,11 +130,11 @@ export default function AnalyticsDashboard({ barbeiroId }) {
           return sum + cents;
         }, 0);
 
-      const horariosCount = {};
+      const horariosCount: Record<string, number> = {};
       agendamentos.forEach((ag) => {
         if (ag.horario) horariosCount[ag.horario] = (horariosCount[ag.horario] || 0) + 1;
       });
-      const horariosPopulares = Object.entries(horariosCount)
+      const horariosPopulares: HorarioPopular[] = Object.entries(horariosCount)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 3)
         .map(([horario, count]) => ({ horario, count }));
@@ -124,7 +156,12 @@ export default function AnalyticsDashboard({ barbeiroId }) {
     }
   };
 
-  const renderCard = (title, value, subtitle, color) => (
+  const renderCard = (
+    title: string,
+    value: string | number,
+    subtitle: string,
+    color: string,
+  ) => (
     <View style={[s.card, { borderLeftColor: color }]}>
       <Text style={s.cardTitle}>{title}</Text>
       <Text style={[s.cardValue, { color }]}>{value}</Text>
@@ -186,7 +223,7 @@ export default function AnalyticsDashboard({ barbeiroId }) {
   );
 }
 
-const getStyles = (theme) =>
+const getStyles = (theme: Theme) =>
   StyleSheet.create({
     container: {
       flex: 1,

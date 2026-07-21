@@ -17,21 +17,25 @@ import { getHorariosOcupados, marcarOcupado } from '../services/OcupacaoService'
 import { criarAgendamento } from '../data/repositories/AgendamentoRepository';
 import useUserProfile from '../hooks/useUserProfile';
 import { getNextDays, formatPreco, precoParaCentavos, toLocalDateString } from '../utils/dateUtils';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList, NovoAgendamento } from '../types';
 
-export default function AgendamentoScreen({ route, navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, 'Agendamento'>;
+
+export default function AgendamentoScreen({ route, navigation }: Props) {
   const { barbeiro } = route.params;
   const { theme } = useTheme();
   const s = getStyles(theme);
 
   const { profile: userProfile } = useUserProfile();
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedTime, setSelectedTime] = useState(null);
-  const [availableTimes, setAvailableTimes] = useState([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingHorarios, setLoadingHorarios] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [createdAgendamento, setCreatedAgendamento] = useState(null);
+  const [createdAgendamento, setCreatedAgendamento] = useState<NovoAgendamento | null>(null);
 
   const horariosPadrao = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -52,7 +56,7 @@ export default function AgendamentoScreen({ route, navigation }) {
    * Retorna true se o horário já passou (com buffer de 30 min para agendamento no dia).
    * Só aplica quando selectedDate === hoje.
    */
-  const isTimeInPast = (horario) => {
+  const isTimeInPast = (horario: string) => {
     if (selectedDate !== todayStr) return false;
     const [hh, mm] = horario.split(':').map(Number);
     const now = new Date();
@@ -99,7 +103,7 @@ export default function AgendamentoScreen({ route, navigation }) {
       const precoDisplay = barbeiro.preco || '25,00';
       const precoEmCentavos = barbeiro.precoEmCentavos ?? precoParaCentavos(precoDisplay);
 
-      const novoAgendamento = {
+      const novoAgendamento: NovoAgendamento = {
         barbeiroId: barbeiro.id,
         barbeiroNome: barbeiro.nome,
         barbeiroTelefone,
@@ -108,15 +112,15 @@ export default function AgendamentoScreen({ route, navigation }) {
         clienteNome,
         clienteTelefone,
         status: 'pendente',
-        data: selectedDate,
-        horario: selectedTime,
+        data: selectedDate!,
+        horario: selectedTime!,
         servico: barbeiro.especialidade || 'Corte e barba',
         preco: precoDisplay,           // mantido p/ compatibilidade
         precoEmCentavos,               // novo campo numérico em centavos
       };
 
       await criarAgendamento(novoAgendamento);
-      await marcarOcupado(barbeiro.id, selectedDate, selectedTime);
+      await marcarOcupado(barbeiro.id, selectedDate!, selectedTime!);
 
       setCreatedAgendamento(novoAgendamento);
       setShowPaymentModal(true);
@@ -134,7 +138,7 @@ export default function AgendamentoScreen({ route, navigation }) {
 
       const clienteInfo = {
         nome: createdAgendamento.clienteNome,
-        email: auth.currentUser?.email,
+        email: auth.currentUser?.email ?? undefined,
       };
 
       const mensagem = WhatsAppService.gerarMensagemAgendamento(
@@ -316,7 +320,7 @@ export default function AgendamentoScreen({ route, navigation }) {
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background,

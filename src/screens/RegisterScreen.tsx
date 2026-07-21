@@ -18,9 +18,22 @@ import { auth } from '../../firebase';
 import { createProfile } from '../data/repositories/UsuarioRepository';
 import { upsertBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { maskPhone, formatPhoneToE164, precoParaCentavos } from '../utils/dateUtils';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList, TipoUsuario } from '../types';
 
-export default function RegisterScreen({ navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
+
+interface FormErrors {
+  nome?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  senha?: string | null;
+  confirmarSenha?: string | null;
+  politica?: string | null;
+}
+
+export default function RegisterScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
@@ -29,17 +42,17 @@ export default function RegisterScreen({ navigation }) {
   const [telefone, setTelefone] = useState('');
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
-  const [tipo, setTipo] = useState('cliente');
+  const [tipo, setTipo] = useState<TipoUsuario>('cliente');
   const [especialidade, setEspecialidade] = useState('');
   const [preco, setPreco] = useState('');
   const [aceitouPolitica, setAceitouPolitica] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
-  const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   const validateForm = () => {
-    const newErrors = {};
+    const newErrors: FormErrors = {};
     if (!nome.trim() || nome.trim().length < 3) {
       newErrors.nome = 'Nome deve ter pelo menos 3 caracteres';
     }
@@ -120,7 +133,7 @@ export default function RegisterScreen({ navigation }) {
           },
         ],
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro no cadastro:', error);
       let errorMessage = 'Erro ao criar conta. Tente novamente.';
       switch (error.code) {
@@ -145,7 +158,7 @@ export default function RegisterScreen({ navigation }) {
     }
   };
 
-  const clearError = (field) => {
+  const clearError = (field: keyof FormErrors) => {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
   };
 
@@ -373,7 +386,7 @@ export default function RegisterScreen({ navigation }) {
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background,

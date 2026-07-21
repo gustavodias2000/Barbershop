@@ -10,10 +10,14 @@
  * de carregamento, antes mesmo de o usuário entender o app — prática
  * reprovada pela Apple App Review e que reduz a taxa de opt-in.
  */
-import messaging from '@react-native-firebase/messaging';
+import messaging, {
+  type FirebaseMessagingTypes,
+} from '@react-native-firebase/messaging';
 import { Alert } from 'react-native';
 import { auth } from '../../firebase';
 import { saveFcmToken } from '../data/repositories/UsuarioRepository';
+
+type RemoteMessage = FirebaseMessagingTypes.RemoteMessage;
 
 class NotificationService {
   constructor() {
@@ -27,7 +31,7 @@ class NotificationService {
    * Chame este método UMA VEZ após o login do usuário, em um momento
    * contextualmente adequado (ex.: depois de exibir uma explicação).
    */
-  async init() {
+  async init(): Promise<boolean> {
     const authStatus = await messaging().requestPermission();
     const enabled =
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
@@ -42,7 +46,7 @@ class NotificationService {
     return enabled;
   }
 
-  _setupBackgroundListeners() {
+  private _setupBackgroundListeners(): void {
     // Listener para quando o app é aberto via notificação (background)
     messaging().onNotificationOpenedApp((remoteMessage) => {
       this._handleNotificationNavigation(remoteMessage);
@@ -59,7 +63,7 @@ class NotificationService {
       .catch(() => {});
   }
 
-  _setupForegroundListener() {
+  private _setupForegroundListener(): void {
     messaging().onMessage(async (remoteMessage) => {
       Alert.alert(
         remoteMessage.notification?.title || 'Nova notificação',
@@ -68,7 +72,17 @@ class NotificationService {
     });
   }
 
-  async getFCMToken() {
+  private _setupTokenRefreshListener(): void {
+    // O FCM pode girar o token; mantém o perfil sempre atualizado
+    messaging().onTokenRefresh((token) => {
+      const uid = auth.currentUser?.uid;
+      if (uid && token) {
+        saveFcmToken(uid, token);
+      }
+    });
+  }
+
+  async getFCMToken(): Promise<string | null> {
     try {
       const token = await messaging().getToken();
       // Item 18: salva o token no perfil — os lembretes automáticos
@@ -84,17 +98,7 @@ class NotificationService {
     }
   }
 
-  _setupTokenRefreshListener() {
-    // O FCM pode girar o token; mantém o perfil sempre atualizado
-    messaging().onTokenRefresh((token) => {
-      const uid = auth.currentUser?.uid;
-      if (uid && token) {
-        saveFcmToken(uid, token);
-      }
-    });
-  }
-
-  _handleNotificationNavigation(remoteMessage) {
+  private _handleNotificationNavigation(remoteMessage: RemoteMessage): void {
     const { data } = remoteMessage;
     // Futura implementação: navegar para Histórico ou Painel conforme data.type
     if (data?.type === 'agendamento_confirmado') {

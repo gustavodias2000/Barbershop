@@ -2,6 +2,9 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import '@testing-library/jest-native/extend-expect';
 import LoginScreen from '../../src/screens/LoginScreen';
+import { ThemeProvider } from '../../src/context/ThemeContext';
+
+const renderWithTheme = (ui) => render(<ThemeProvider>{ui}</ThemeProvider>);
 
 // Mock Firebase Auth
 jest.mock('firebase/auth', () => ({
@@ -24,7 +27,7 @@ describe('LoginScreen', () => {
   });
 
   it('should render login form correctly', () => {
-    const { getByText, getByPlaceholderText } = render(
+    const { getByText, getByPlaceholderText } = renderWithTheme(
       <LoginScreen navigation={mockNavigation} />
     );
 
@@ -36,7 +39,7 @@ describe('LoginScreen', () => {
   });
 
   it('should show error for invalid email', async () => {
-    const { getByPlaceholderText, getByText, queryByText } = render(
+    const { getByPlaceholderText, getByText, queryByText } = renderWithTheme(
       <LoginScreen navigation={mockNavigation} />
     );
 
@@ -52,7 +55,7 @@ describe('LoginScreen', () => {
   });
 
   it('should show error for short password', async () => {
-    const { getByPlaceholderText, getByText, queryByText } = render(
+    const { getByPlaceholderText, getByText, queryByText } = renderWithTheme(
       <LoginScreen navigation={mockNavigation} />
     );
 
@@ -70,7 +73,7 @@ describe('LoginScreen', () => {
   });
 
   it('should clear error when user starts typing', async () => {
-    const { getByPlaceholderText, getByText, queryByText } = render(
+    const { getByPlaceholderText, getByText, queryByText } = renderWithTheme(
       <LoginScreen navigation={mockNavigation} />
     );
 
@@ -94,7 +97,7 @@ describe('LoginScreen', () => {
   });
 
   it('should validate form before submission', async () => {
-    const { getByText } = render(
+    const { getByText } = renderWithTheme(
       <LoginScreen navigation={mockNavigation} />
     );
 

@@ -1,24 +1,9 @@
 import '@testing-library/jest-native/extend-expect';
 
-// Mock React Native modules
-jest.mock('react-native', () => {
-  const RN = jest.requireActual('react-native');
-  
-  return {
-    ...RN,
-    Alert: {
-      alert: jest.fn(),
-    },
-    Linking: {
-      canOpenURL: jest.fn(() => Promise.resolve(true)),
-      openURL: jest.fn(() => Promise.resolve()),
-    },
-    Platform: {
-      OS: 'ios',
-      select: jest.fn((obj) => obj.ios),
-    },
-  };
-});
+// NÃO mockar 'react-native' globalmente: no RN 0.80 o spread do módulo
+// dispara todos os getters lazy e quebra o preset do Jest.
+// Cada teste mocka apenas o que precisa (Alert, Linking etc.).
+jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(jest.fn());
 
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -29,61 +14,83 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   multiRemove: jest.fn(() => Promise.resolve()),
 }));
 
-// Mock Firebase
+// Mock Firebase (app local)
 jest.mock('./firebase', () => ({
   auth: {
-    currentUser: { email: 'test@example.com' },
+    currentUser: { uid: 'test-uid', email: 'test@example.com' },
     signOut: jest.fn(),
   },
   db: {},
+  functions: {},
 }));
 
 jest.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: jest.fn(),
+  createUserWithEmailAndPassword: jest.fn(),
+  sendPasswordResetEmail: jest.fn(),
+  sendEmailVerification: jest.fn(),
   signOut: jest.fn(),
+  updatePassword: jest.fn(),
+  deleteUser: jest.fn(),
+  reauthenticateWithCredential: jest.fn(),
+  EmailAuthProvider: { credential: jest.fn() },
 }));
 
 jest.mock('firebase/firestore', () => ({
   collection: jest.fn(),
   doc: jest.fn(),
   addDoc: jest.fn(),
+  setDoc: jest.fn(),
+  getDoc: jest.fn(),
   updateDoc: jest.fn(),
+  deleteDoc: jest.fn(),
   getDocs: jest.fn(),
   query: jest.fn(),
   where: jest.fn(),
   orderBy: jest.fn(),
+  limit: jest.fn(),
+  serverTimestamp: jest.fn(() => ({ __serverTimestamp: true })),
 }));
 
-// Mock React Navigation
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({
-    navigate: jest.fn(),
-    goBack: jest.fn(),
-  }),
-  useRoute: () => ({
-    params: {},
-  }),
+jest.mock('firebase/functions', () => ({
+  getFunctions: jest.fn(),
+  // Rejeita por padrão para exercitar o fallback do WhatsAppService
+  httpsCallable: jest.fn(() => jest.fn(() => Promise.reject(new Error('offline')))),
 }));
 
-// Mock Stripe
-jest.mock('@stripe/stripe-react-native', () => ({
-  initStripe: jest.fn(() => Promise.resolve()),
-  presentPaymentSheet: jest.fn(() => Promise.resolve({ error: null })),
-  initPaymentSheet: jest.fn(() => Promise.resolve({ error: null })),
-  createPaymentMethod: jest.fn(() => Promise.resolve({ error: null })),
-}));
+// Mock React Navigation (preserva o módulo real; só substitui os hooks)
+jest.mock('@react-navigation/native', () => {
+  const actual = jest.requireActual('@react-navigation/native');
+  return {
+    ...actual,
+    useNavigation: () => ({
+      navigate: jest.fn(),
+      goBack: jest.fn(),
+      replace: jest.fn(),
+    }),
+    useRoute: () => ({
+      params: {},
+    }),
+  };
+});
 
 // Mock Firebase Messaging
-jest.mock('@react-native-firebase/messaging', () => ({
-  __esModule: true,
-  default: () => ({
+jest.mock('@react-native-firebase/messaging', () => {
+  const messagingInstance = {
     requestPermission: jest.fn(() => Promise.resolve(1)),
     getToken: jest.fn(() => Promise.resolve('mock-token')),
     onMessage: jest.fn(),
+    onTokenRefresh: jest.fn(),
     onNotificationOpenedApp: jest.fn(),
     getInitialNotification: jest.fn(() => Promise.resolve(null)),
-  }),
-}));
+  };
+  const messagingFn = () => messagingInstance;
+  messagingFn.AuthorizationStatus = { AUTHORIZED: 1, PROVISIONAL: 2, DENIED: 0 };
+  return {
+    __esModule: true,
+    default: messagingFn,
+  };
+});
 
 // Suppress console warnings during tests
 global.console = {

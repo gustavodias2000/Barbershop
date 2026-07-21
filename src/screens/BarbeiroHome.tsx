@@ -19,16 +19,20 @@ import {
 } from '../data/repositories/AgendamentoRepository';
 import useUserProfile from '../hooks/useUserProfile';
 import { formatDateTime, formatPreco } from '../utils/dateUtils';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Theme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { SkeletonList } from '../components/Skeleton';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList, Agendamento } from '../types';
 
-export default function BarbeiroHome({ navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, 'Barbeiro'>;
+
+export default function BarbeiroHome({ navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
   const { profile: userProfile, refresh: refreshProfile } = useUserProfile();
-  const [agendamentos, setAgendamentos] = useState([]);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
@@ -68,7 +72,7 @@ export default function BarbeiroHome({ navigation }) {
     }
   };
 
-  const confirmar = async (agendamento) => {
+  const confirmar = async (agendamento: Agendamento) => {
     Alert.alert(
       'Confirmar Agendamento',
       `Confirmar agendamento de ${agendamento.clienteNome}?`,
@@ -120,7 +124,7 @@ export default function BarbeiroHome({ navigation }) {
     );
   };
 
-  const cancelar = async (agendamento) => {
+  const cancelar = async (agendamento: Agendamento) => {
     Alert.alert(
       'Cancelar Agendamento',
       `Cancelar agendamento de ${agendamento.clienteNome}?`,
@@ -174,7 +178,7 @@ export default function BarbeiroHome({ navigation }) {
     );
   };
 
-  const concluir = async (agendamento) => {
+  const concluir = async (agendamento: Agendamento) => {
     Alert.alert(
       'Concluir Atendimento',
       `Marcar atendimento de ${agendamento.clienteNome} como concluído?`,
@@ -197,7 +201,7 @@ export default function BarbeiroHome({ navigation }) {
     );
   };
 
-  const renderAgendamento = ({ item }) => (
+  const renderAgendamento = ({ item }: { item: Agendamento }) => (
     <View style={s.agendamentoCard}>
       <View style={s.agendamentoHeader}>
         <View style={s.clienteInfo}>
@@ -384,7 +388,7 @@ export default function BarbeiroHome({ navigation }) {
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
