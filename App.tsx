@@ -14,6 +14,11 @@ import HistoricoScreen from './src/screens/HistoricoScreen';
 import PaymentScreen from './src/screens/PaymentScreen';
 import PerfilScreen from './src/screens/PerfilScreen';
 import PrivacidadeScreen from './src/screens/PrivacidadeScreen';
+import ConfigAgendaScreen from './src/screens/ConfigAgendaScreen';
+import ConfigServicosScreen from './src/screens/ConfigServicosScreen';
+import TemplatesMensagemScreen from './src/screens/TemplatesMensagemScreen';
+import ClientesBanidosScreen from './src/screens/ClientesBanidosScreen';
+import HistoricoClienteScreen from './src/screens/HistoricoClienteScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -90,6 +95,35 @@ export default function App() {
             name="Privacidade"
             component={PrivacidadeScreen}
             options={{ title: 'Política de Privacidade' }}
+          />
+
+          {/* Configurações do barbeiro */}
+          <Stack.Screen
+            name="ConfigAgenda"
+            component={ConfigAgendaScreen}
+            options={{ title: 'Horário de Atendimento' }}
+          />
+          <Stack.Screen
+            name="ConfigServicos"
+            component={ConfigServicosScreen}
+            options={{ title: 'Meus Serviços' }}
+          />
+          <Stack.Screen
+            name="TemplatesMensagem"
+            component={TemplatesMensagemScreen}
+            options={{ title: 'Templates WhatsApp' }}
+          />
+          <Stack.Screen
+            name="ClientesBanidos"
+            component={ClientesBanidosScreen}
+            options={{ title: 'Clientes Banidos' }}
+          />
+          <Stack.Screen
+            name="HistoricoCliente"
+            component={HistoricoClienteScreen}
+            options={({ route }) => ({
+              title: `Histórico — ${route.params.clienteNome}`,
+            })}
           />
         </Stack.Navigator>
       </NavigationContainer>

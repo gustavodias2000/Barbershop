@@ -37,6 +37,8 @@ interface AnalyticsData {
   avaliacaoMedia: number;
   totalAvaliacoes: number;
   faturamentoMesCentavos: number;
+  ticketMedioCentavos: number;
+  horasAtivasMes: number;
   horariosPopulares: HorarioPopular[];
 }
 
@@ -52,6 +54,8 @@ export default function AnalyticsDashboard({ barbeiroId }: { barbeiroId: string 
     avaliacaoMedia: 0,
     totalAvaliacoes: 0,
     faturamentoMesCentavos: 0,
+    ticketMedioCentavos: 0,
+    horasAtivasMes: 0,
     horariosPopulares: [],
   });
   const [loading, setLoading] = useState(true);
@@ -127,9 +131,18 @@ export default function AnalyticsDashboard({ barbeiroId }: { barbeiroId: string 
       ]);
 
       const horariosCount: Record<string, number> = {};
+      const diasAtivos = new Set<string>();
       recentesSnap.docs.forEach((d) => {
         const ag = d.data() as Agendamento;
         if (ag.horario) horariosCount[ag.horario] = (horariosCount[ag.horario] || 0) + 1;
+        // Conta dias distintos com pelo menos um atendimento concluído no mês
+        if (
+          ag.data &&
+          ag.data >= inicioMes.toISOString().slice(0, 10) &&
+          ['confirmado', 'concluido', 'avaliado'].includes(ag.status)
+        ) {
+          diasAtivos.add(ag.data);
+        }
       });
       const horariosPopulares: HorarioPopular[] = Object.entries(horariosCount)
         .sort(([, a], [, b]) => b - a)
@@ -137,15 +150,23 @@ export default function AnalyticsDashboard({ barbeiroId }: { barbeiroId: string 
         .map(([horario, qtd]) => ({ horario, count: qtd }));
 
       const media = avaliacoesSnap.data().media ?? 0;
+      const faturamentoMes = faturamentoSnap.data().total ?? 0;
+      const agendamentosMesCount = mesSnap.data().count;
+      const ticketMedio =
+        agendamentosMesCount > 0
+          ? Math.round(faturamentoMes / agendamentosMesCount)
+          : 0;
 
       setAnalytics({
         totalAgendamentos: totalSnap.data().count,
         agendamentosHoje: hojeSnap.data().count,
         agendamentosSemana: semanaSnap.data().count,
-        agendamentosMes: mesSnap.data().count,
+        agendamentosMes: agendamentosMesCount,
         avaliacaoMedia: Math.round(media * 10) / 10,
         totalAvaliacoes: avaliacoesSnap.data().total,
-        faturamentoMesCentavos: faturamentoSnap.data().total,
+        faturamentoMesCentavos: faturamentoMes,
+        ticketMedioCentavos: ticketMedio,
+        horasAtivasMes: diasAtivos.size,
         horariosPopulares,
       });
     } catch (error) {
@@ -202,6 +223,20 @@ export default function AnalyticsDashboard({ barbeiroId }: { barbeiroId: string 
           formatMoney(analytics.faturamentoMesCentavos),
           'confirmados + concluídos',
           theme.colors.success,
+        )}
+      </View>
+      <View style={s.row}>
+        {renderCard(
+          'Ticket Médio',
+          formatMoney(analytics.ticketMedioCentavos),
+          'por agendamento no mês',
+          '#e67e22',
+        )}
+        {renderCard(
+          'Dias Ativos',
+          String(analytics.horasAtivasMes),
+          'dias com atendimento no mês',
+          '#16a085',
         )}
       </View>
 

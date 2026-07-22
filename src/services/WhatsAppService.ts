@@ -185,6 +185,30 @@ Infelizmente precisamos cancelar seu agendamento:
 
 Te esperamos! 💪`;
   }
+
+  /**
+   * Interpola variáveis em um template customizado do barbeiro.
+   *
+   * Variáveis suportadas:
+   *   {nome_barbeiro}  {nome_cliente}  {data}  {horario}  {servico}
+   */
+  gerarMensagemComTemplate(
+    template: string,
+    vars: {
+      nome_barbeiro: string;
+      nome_cliente: string;
+      data: string;
+      horario: string;
+      servico: string;
+    },
+  ): string {
+    return template
+      .replace(/{nome_barbeiro}/g, vars.nome_barbeiro)
+      .replace(/{nome_cliente}/g, vars.nome_cliente)
+      .replace(/{data}/g, vars.data)
+      .replace(/{horario}/g, vars.horario)
+      .replace(/{servico}/g, vars.servico);
+  }
 }
 
 // Exportar instância singleton

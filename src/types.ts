@@ -10,6 +10,36 @@ import type { Timestamp, FieldValue } from 'firebase/firestore';
 
 export type TipoUsuario = 'cliente' | 'barbeiro';
 
+// ─── Serviços do barbeiro ─────────────────────────────────────────────────────
+
+export interface ServicoBarbeiro {
+  id: string;
+  nome: string;
+  duracaoMinutos: number;   // Ex.: 30, 45, 60, 90
+  precoEmCentavos: number;  // Ex.: 4500 = R$ 45,00
+}
+
+// ─── Configuração de agenda ───────────────────────────────────────────────────
+
+export interface ConfiguracaoAgenda {
+  horaInicio: string;           // "09:00"
+  horaFim: string;              // "18:00"
+  almocoInicio: string;         // "12:00" — "" desativa o almoço
+  almocoFim: string;            // "13:00"
+  antecedenciaMinutos: number;  // 0 = sem restrição, 30 = mínimo 30min de antecedência
+  antecedenciaMaximaDias: number; // 7 a 120 dias à frente; 0 = sem limite
+  diasAtendimento: number[];    // 0=dom, 1=seg, ..., 6=sab; ex.: [1,2,3,4,5,6]
+}
+
+// ─── Templates de mensagem WhatsApp ──────────────────────────────────────────
+
+export interface TemplatesMensagem {
+  agendamento: string;    // Variáveis: {nome_barbeiro}, {nome_cliente}, {data}, {horario}, {servico}
+  confirmacao: string;
+  cancelamento: string;
+  lembrete: string;
+}
+
 export type StatusAgendamento =
   | 'pendente'
   | 'confirmado'
@@ -25,6 +55,15 @@ export type Horario = string;
 
 /** Campo de data vindo do Firestore: Timestamp ao ler, FieldValue ao gravar */
 export type FirestoreDate = Timestamp | FieldValue;
+
+// ─── Clientes banidos ─────────────────────────────────────────────────────────
+
+export interface ClienteBanido {
+  uid: string;
+  nome: string;
+  email: string;
+  bannedAt?: FirestoreDate;
+}
 
 // ─── Modelos ─────────────────────────────────────────────────────────────────
 
@@ -52,6 +91,14 @@ export interface Barbeiro {
   preco?: string;
   /** Preferido: preço como inteiro em centavos (2500 = R$ 25,00) */
   precoEmCentavos?: number;
+  /** Lista de serviços oferecidos com duração e preço */
+  servicos?: ServicoBarbeiro[];
+  /** Configuração de horários de atendimento */
+  configuracaoAgenda?: ConfiguracaoAgenda;
+  /** Templates de mensagens WhatsApp */
+  templatesMensagem?: TemplatesMensagem;
+  /** Lista de clientes banidos pelo barbeiro */
+  clientesBanidos?: ClienteBanido[];
   createdAt?: FirestoreDate;
   updatedAt?: FirestoreDate;
 }
@@ -108,4 +155,10 @@ export type RootStackParamList = {
   Payment: { agendamento: Agendamento };
   Perfil: undefined;
   Privacidade: undefined;
+  // Telas de configuração do barbeiro
+  ConfigAgenda: undefined;
+  ConfigServicos: undefined;
+  TemplatesMensagem: undefined;
+  ClientesBanidos: undefined;
+  HistoricoCliente: { clienteUid: string; clienteNome: string; barbeiroId: string };
 };

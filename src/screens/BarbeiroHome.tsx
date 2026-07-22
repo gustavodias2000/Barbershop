@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
@@ -36,6 +37,7 @@ export default function BarbeiroHome({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [stats, setStats] = useState({ pendentes: 0, confirmados: 0, total: 0 });
 
   useEffect(() => {
@@ -233,6 +235,21 @@ export default function BarbeiroHome({ navigation }: Props) {
         <Text style={s.agendamentoCreated}>
           Solicitado em: {formatDateTime(item.createdAt)}
         </Text>
+        {item.clienteUid ? (
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate('HistoricoCliente', {
+                clienteUid: item.clienteUid,
+                clienteNome: item.clienteNome,
+                barbeiroId: barbeiroUid,
+              })
+            }
+            accessibilityRole="button"
+            accessibilityLabel={`Ver histórico de ${item.clienteNome}`}
+          >
+            <Text style={s.verHistoricoText}>📋 Ver histórico do cliente</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {item.status === 'pendente' && (
@@ -310,10 +327,24 @@ export default function BarbeiroHome({ navigation }: Props) {
             <Text style={s.perfilButtonText}>👤</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            style={s.iconHeaderButton}
+            accessibilityRole="button"
+            accessibilityLabel="Configurações"
+            onPress={() => {
+              setShowSettings(!showSettings);
+              setShowAnalytics(false);
+            }}
+          >
+            <Text style={s.iconHeaderButtonText}>⚙️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={s.analyticsButton}
             accessibilityRole="button"
             accessibilityLabel={showAnalytics ? 'Ver agenda' : 'Ver analytics'}
-            onPress={() => setShowAnalytics(!showAnalytics)}
+            onPress={() => {
+              setShowAnalytics(!showAnalytics);
+              setShowSettings(false);
+            }}
           >
             <Text style={s.analyticsButtonText}>
               {showAnalytics ? 'Agenda' : 'Analytics'}
@@ -342,7 +373,52 @@ export default function BarbeiroHome({ navigation }: Props) {
         </View>
       </View>
 
-      {showAnalytics ? (
+      {showSettings ? (
+        <ScrollView contentContainerStyle={s.settingsContainer}>
+          <Text style={s.settingsTitle}>Configurações</Text>
+          {[
+            {
+              icon: '📅',
+              label: 'Horário de Atendimento',
+              desc: 'Configure dias, horários e intervalo de almoço',
+              route: 'ConfigAgenda' as const,
+            },
+            {
+              icon: '✂️',
+              label: 'Meus Serviços',
+              desc: 'Cadastre serviços com duração e preço',
+              route: 'ConfigServicos' as const,
+            },
+            {
+              icon: '💬',
+              label: 'Templates WhatsApp',
+              desc: 'Personalize mensagens de agendamento',
+              route: 'TemplatesMensagem' as const,
+            },
+            {
+              icon: '🚫',
+              label: 'Clientes Banidos',
+              desc: 'Gerencie clientes que não podem agendar',
+              route: 'ClientesBanidos' as const,
+            },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.route}
+              style={s.settingsItem}
+              onPress={() => navigation.navigate(item.route)}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+            >
+              <Text style={s.settingsItemIcon}>{item.icon}</Text>
+              <View style={s.settingsItemText}>
+                <Text style={s.settingsItemLabel}>{item.label}</Text>
+                <Text style={s.settingsItemDesc}>{item.desc}</Text>
+              </View>
+              <Text style={s.settingsChevron}>›</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : showAnalytics ? (
         <AnalyticsDashboard barbeiroId={barbeiroUid} />
       ) : (
         <>
@@ -436,6 +512,17 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
   },
   perfilButtonText: {
+    fontSize: 20,
+  },
+  iconHeaderButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.colors.surfaceVariant,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconHeaderButtonText: {
     fontSize: 20,
   },
   analyticsButton: {
@@ -611,5 +698,57 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     color: theme.colors.textMuted,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  // Settings panel
+  settingsContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  settingsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 16,
+  },
+  settingsItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  settingsItemIcon: {
+    fontSize: 24,
+    marginRight: 14,
+  },
+  settingsItemText: {
+    flex: 1,
+  },
+  settingsItemLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  settingsItemDesc: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+  },
+  settingsChevron: {
+    fontSize: 22,
+    color: theme.colors.textMuted,
+  },
+  // Histórico do cliente
+  verHistoricoText: {
+    fontSize: 13,
+    color: theme.colors.primary,
+    fontWeight: '600',
+    marginTop: 6,
   },
 });

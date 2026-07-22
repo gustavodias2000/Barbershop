@@ -7,6 +7,7 @@ import {
   collection,
   query,
   getDocs,
+  getDoc,
   doc,
   setDoc,
   deleteDoc,
@@ -14,6 +15,15 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import type { Barbeiro } from '../../types';
+
+/**
+ * Busca um barbeiro pelo uid.
+ */
+export async function getBarbeiro(uid: string): Promise<Barbeiro | null> {
+  const snap = await getDoc(doc(db, 'barbeiros', uid));
+  if (!snap.exists()) return null;
+  return { ...(snap.data() as Omit<Barbeiro, 'id'>), id: snap.id };
+}
 
 /**
  * Lista os barbeiros disponíveis (paginado).
