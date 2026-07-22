@@ -192,7 +192,6 @@ export type RootStackParamList = {
   Barbeiro: undefined;
   Agendamento: { barbeiro: Barbeiro };
   Historico: undefined;
-  Payment: { agendamento: Agendamento };
   Perfil: undefined;
   Privacidade: undefined;
   // Telas de configuração do barbeiro

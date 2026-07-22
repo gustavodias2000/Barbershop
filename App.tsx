@@ -13,7 +13,6 @@ import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import AgendamentoScreen from './src/screens/AgendamentoScreen';
 import HistoricoScreen from './src/screens/HistoricoScreen';
-import PaymentScreen from './src/screens/PaymentScreen';
 import PerfilScreen from './src/screens/PerfilScreen';
 import PrivacidadeScreen from './src/screens/PrivacidadeScreen';
 import ConfigAgendaScreen from './src/screens/ConfigAgendaScreen';
@@ -76,11 +75,6 @@ export default function App() {
             name="Historico"
             component={HistoricoScreen}
             options={{ title: 'Histórico' }}
-          />
-          <Stack.Screen
-            name="Payment"
-            component={PaymentScreen}
-            options={{ title: 'Pagamento' }}
           />
 
           {/* Barbeiro — Tab Navigator */}
