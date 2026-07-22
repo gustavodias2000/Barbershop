@@ -24,6 +24,7 @@ import SuporteScreen from './src/screens/SuporteScreen';
 import ListaEsperaScreen from './src/screens/ListaEsperaScreen';
 import RecorrenciasScreen from './src/screens/RecorrenciasScreen';
 import CriarRecorrenciaScreen from './src/screens/CriarRecorrenciaScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -156,6 +157,11 @@ export default function App() {
             options={({ route }) => ({
               title: `Recorrência — ${route.params.clienteNome}`,
             })}
+          />
+          <Stack.Screen
+            name="Onboarding"
+            component={OnboardingScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       </NavigationContainer>

@@ -23,6 +23,8 @@ import { formatDateTime, formatPreco } from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { SkeletonList } from '../components/Skeleton';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ONBOARDING_KEY } from './OnboardingScreen';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, Agendamento } from '../types';
 
@@ -41,8 +43,20 @@ export default function BarbeiroHome({ navigation }: Props) {
   const [stats, setStats] = useState({ pendentes: 0, confirmados: 0, total: 0 });
 
   useEffect(() => {
+    checkOnboarding();
     fetchAgendamentos().finally(() => setLoading(false));
   }, []);
+
+  const checkOnboarding = async () => {
+    try {
+      const visto = await AsyncStorage.getItem(ONBOARDING_KEY.barbeiro);
+      if (!visto) {
+        navigation.navigate('Onboarding', { tipo: 'barbeiro' });
+      }
+    } catch (_) {
+      // ignora falha no storage
+    }
+  };
 
   const fetchAgendamentos = async () => {
     try {

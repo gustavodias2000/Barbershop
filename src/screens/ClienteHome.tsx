@@ -18,6 +18,8 @@ import { useTheme, type Theme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { formatPreco } from '../utils/dateUtils';
 import { SkeletonList } from '../components/Skeleton';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ONBOARDING_KEY } from './OnboardingScreen';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, Barbeiro, Agendamento } from '../types';
 
@@ -34,10 +36,22 @@ export default function ClienteHome({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    checkOnboarding();
     fetchAll();
     // Solicita permissão de push APÓS o login, no contexto correto da jornada
     NotificationService.init();
   }, []);
+
+  const checkOnboarding = async () => {
+    try {
+      const visto = await AsyncStorage.getItem(ONBOARDING_KEY.cliente);
+      if (!visto) {
+        navigation.navigate('Onboarding', { tipo: 'cliente' });
+      }
+    } catch (_) {
+      // ignora falha no storage
+    }
+  };
 
   const fetchAll = async () => {
     try {

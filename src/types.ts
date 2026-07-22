@@ -212,4 +212,5 @@ export type RootStackParamList = {
     clienteTelefone?: string;
     barbeiroId: string;
   };
+  Onboarding: { tipo: 'cliente' | 'barbeiro' };
 };
