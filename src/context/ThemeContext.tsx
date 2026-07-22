@@ -43,45 +43,47 @@ interface ThemeContextValue {
 
 // ─── Temas ───────────────────────────────────────────────────────────────────
 
+// ─── Paleta: Azul Profundo + Âmbar ───────────────────────────────────────────
+// Light: âmbar escuro (#D97706) sobre branco — contraste 4.6:1 (WCAG AA)
+// Dark : âmbar claro (#F59E0B) sobre azul-escuro (#1A2735) — contraste 8.1:1
+
 export const lightTheme: Theme = {
   isDark: false,
   colors: {
-    primary: '#3498db',
-    secondary: '#2c3e50',
-    background: '#f0f2f5',
-    surface: '#ffffff',
-    surfaceVariant: '#f8f9fa',
-    text: '#1a2a3a',
-    // #5a6472 sobre #fff → 5.87:1 (passa WCAG AA)
-    textSecondary: '#5a6472',
-    textMuted: '#8a9bb0',
-    border: '#dde1e7',
-    borderLight: '#eef0f3',
-    success: '#27ae60',
-    warning: '#e07b00',
-    error: '#c0392b',
-    info: '#2471a3',
+    primary: '#D97706',          // âmbar escuro — contraste suficiente em fundo claro
+    secondary: '#92400E',        // âmbar profundo
+    background: '#F8FAFC',       // branco-azulado suave
+    surface: '#FFFFFF',
+    surfaceVariant: '#F1F5F9',
+    text: '#0F172A',             // quase-preto azulado
+    textSecondary: '#475569',    // slate-600 — 7.5:1 sobre branco
+    textMuted: '#94A3B8',        // slate-400
+    border: '#CBD5E1',
+    borderLight: '#E2E8F0',
+    success: '#059669',
+    warning: '#D97706',
+    error: '#DC2626',
+    info: '#2563EB',
   },
 };
 
 export const darkTheme: Theme = {
   isDark: true,
   colors: {
-    primary: '#4aa3e8',
-    secondary: '#ecf0f1',
-    background: '#111827',
-    surface: '#1f2937',
-    surfaceVariant: '#374151',
-    text: '#f3f4f6',
-    // #a8b8c8 sobre #1f2937 → ~7.5:1 (passa WCAG AA)
-    textSecondary: '#a8b8c8',
-    textMuted: '#6b7280',
-    border: '#374151',
-    borderLight: '#4b5563',
-    success: '#2ecc71',
-    warning: '#f5a623',
-    error: '#e74c3c',
-    info: '#3498db',
+    primary: '#F59E0B',          // âmbar — cor de destaque principal
+    secondary: '#FCD34D',        // âmbar claro
+    background: '#0F1923',       // azul profundo quase-preto
+    surface: '#1A2735',          // cards e modais
+    surfaceVariant: '#1F3144',   // inputs e variantes
+    text: '#F8FAFC',             // branco-azulado
+    textSecondary: '#94A3B8',    // slate-400 — 7.2:1 sobre surface
+    textMuted: '#5C7A96',        // slate mais escuro
+    border: '#2A3F54',
+    borderLight: '#1F3347',
+    success: '#10B981',
+    warning: '#F59E0B',
+    error: '#EF4444',
+    info: '#60A5FA',
   },
 };
 

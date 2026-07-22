@@ -36,12 +36,15 @@ export default function App() {
           initialRouteName="Login"
           screenOptions={{
             headerStyle: {
-              backgroundColor: '#3498db',
+              backgroundColor: '#0F1923',
             },
-            headerTintColor: '#fff',
+            headerTintColor: '#F59E0B',
             headerTitleStyle: {
-              fontWeight: 'bold',
+              fontWeight: '700',
+              color: '#F8FAFC',
+              fontSize: 17,
             },
+            headerShadowVisible: false,
           }}
         >
           {/* Autenticação */}
