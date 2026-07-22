@@ -1,10 +1,13 @@
 /**
- * LoginScreen — redesenhada com visual premium: Azul Profundo + Âmbar.
+ * LoginScreen — visual premium Azul Profundo + Âmbar (v2).
  *
- * Fundo escuro fixo (independente do tema do sistema), círculos decorativos,
- * card semi-transparente, inputs com borda âmbar no foco e botão com brilho.
+ * Novidades:
+ *  • Animações de entrada: hero desliza de cima, card sobe do fundo
+ *  • Mostrar/ocultar senha com toggle
+ *  • Listras diagonais de fundo (referência à pole de barbearia)
+ *  • Scale feedback ao pressionar o botão principal
  */
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +20,7 @@ import {
   Platform,
   ScrollView,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
@@ -32,85 +36,110 @@ interface FormErrors {
   senha?: string | null;
 }
 
-const { width: W } = Dimensions.get('window');
+const { width: W, height: H } = Dimensions.get('window');
 
-// Cores fixas — login sempre escuro independente do tema
+// ─── Paleta fixa — login sempre escuro ───────────────────────────────────────
 const C = {
-  bg: '#0F1923',
-  card: '#1A2735',
-  cardBorder: '#2A3F54',
-  amber: '#F59E0B',
-  amberGlow: 'rgba(245,158,11,0.18)',
-  amberDim: 'rgba(245,158,11,0.12)',
-  input: '#1F3144',
-  inputBorder: '#2A3F54',
-  inputFocus: '#F59E0B',
-  text: '#F8FAFC',
-  textSec: '#94A3B8',
-  textMuted: '#5C7A96',
-  error: '#EF4444',
-  errorBg: 'rgba(239,68,68,0.10)',
-  white: '#fff',
-  circle1: 'rgba(245,158,11,0.06)',
-  circle2: 'rgba(245,158,11,0.04)',
-  circle3: 'rgba(96,165,250,0.05)',
+  bg:           '#0F1923',
+  stripe:       'rgba(245,158,11,0.04)',
+  card:         '#1A2735',
+  cardBorder:   '#2A3F54',
+  amber:        '#F59E0B',
+  amberGlow:    'rgba(245,158,11,0.20)',
+  amberDim:     'rgba(245,158,11,0.10)',
+  amberShadow:  'rgba(245,158,11,0.45)',
+  input:        '#1F3144',
+  inputBorder:  '#2A3F54',
+  text:         '#F8FAFC',
+  textSec:      '#94A3B8',
+  textMuted:    '#5C7A96',
+  error:        '#EF4444',
+  errorBg:      'rgba(239,68,68,0.10)',
+  circle1:      'rgba(245,158,11,0.07)',
+  circle2:      'rgba(245,158,11,0.04)',
+  circle3:      'rgba(96,165,250,0.05)',
 };
 
+// ─── Listras diagonais ────────────────────────────────────────────────────────
+const STRIPE_COUNT = 12;
+const STRIPE_W = 2;
+const STRIPE_GAP = W / STRIPE_COUNT;
+
 export default function LoginScreen({ navigation }: Props) {
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [emailFocused, setEmailFocused] = useState(false);
-  const [senhaFocused, setSenhaFocused] = useState(false);
+  const [email, setEmail]                 = useState('');
+  const [senha, setSenha]                 = useState('');
+  const [loading, setLoading]             = useState(false);
+  const [errors, setErrors]               = useState<FormErrors>({});
+  const [emailFocused, setEmailFocused]   = useState(false);
+  const [senhaFocused, setSenhaFocused]   = useState(false);
+  const [mostrarSenha, setMostrarSenha]   = useState(false);
 
   const senhaRef = useRef<TextInput>(null);
 
+  // ── Animações de entrada ──
+  const heroOpacity   = useRef(new Animated.Value(0)).current;
+  const heroTranslateY = useRef(new Animated.Value(-24)).current;
+  const cardOpacity   = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(32)).current;
+  const btnScale      = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(heroOpacity, {
+        toValue: 1, duration: 600, useNativeDriver: true,
+      }),
+      Animated.spring(heroTranslateY, {
+        toValue: 0, tension: 80, friction: 10, useNativeDriver: true,
+      }),
+      Animated.timing(cardOpacity, {
+        toValue: 1, duration: 600, delay: 250, useNativeDriver: true,
+      }),
+      Animated.spring(cardTranslateY, {
+        toValue: 0, tension: 70, friction: 10, delay: 250, useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  const onPressIn = () =>
+    Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true }).start();
+  const onPressOut = () =>
+    Animated.spring(btnScale, { toValue: 1, useNativeDriver: true }).start();
+
+  // ── Validação ──
   const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   const validateForm = () => {
-    const newErrors: FormErrors = {};
-    if (!email.trim()) {
-      newErrors.email = 'Email é obrigatório';
-    } else if (!validateEmail(email.trim())) {
-      newErrors.email = 'Email inválido';
-    }
-    if (!senha.trim()) {
-      newErrors.senha = 'Senha é obrigatória';
-    } else if (senha.length < 6) {
-      newErrors.senha = 'Senha deve ter pelo menos 6 caracteres';
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const errs: FormErrors = {};
+    if (!email.trim())               errs.email = 'Email é obrigatório';
+    else if (!validateEmail(email.trim())) errs.email = 'Email inválido';
+    if (!senha.trim())               errs.senha = 'Senha é obrigatória';
+    else if (senha.length < 6)       errs.senha = 'Mínimo 6 caracteres';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
+  const clearError = (field: keyof FormErrors) => {
+    if (errors[field]) setErrors(p => ({ ...p, [field]: null }));
+  };
+
+  // ── Login ──
   const handleLogin = async () => {
     if (!validateForm()) return;
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), senha);
-      const uid = userCredential.user.uid;
-      const userData = await getProfile(uid);
+      const { user } = await signInWithEmailAndPassword(auth, email.trim(), senha);
+      const userData = await getProfile(user.uid);
       navigation.replace(userData?.tipo === 'barbeiro' ? 'Barbeiro' : 'Cliente');
     } catch (error: any) {
-      console.error('Erro no login:', error);
       let msg = 'Erro ao fazer login. Tente novamente.';
       switch (error.code) {
-        case 'auth/user-not-found':
-          msg = 'Usuário não encontrado.'; break;
+        case 'auth/user-not-found':         msg = 'Usuário não encontrado.'; break;
         case 'auth/wrong-password':
-        case 'auth/invalid-credential':
-          msg = 'Email ou senha incorretos.'; break;
-        case 'auth/invalid-email':
-          msg = 'Email inválido.'; break;
-        case 'auth/user-disabled':
-          msg = 'Conta desabilitada. Entre em contato com o suporte.'; break;
-        case 'auth/too-many-requests':
-          msg = 'Muitas tentativas. Aguarde alguns minutos.'; break;
-        case 'auth/network-request-failed':
-          msg = 'Sem conexão. Verifique sua internet.'; break;
-        default:
-          msg = 'Erro inesperado. Verifique sua conexão.';
+        case 'auth/invalid-credential':     msg = 'Email ou senha incorretos.'; break;
+        case 'auth/invalid-email':          msg = 'Email inválido.'; break;
+        case 'auth/user-disabled':          msg = 'Conta desabilitada.'; break;
+        case 'auth/too-many-requests':      msg = 'Muitas tentativas. Aguarde.'; break;
+        case 'auth/network-request-failed': msg = 'Sem conexão com internet.'; break;
       }
       Alert.alert('Erro no login', msg);
     } finally {
@@ -118,13 +147,14 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
+  // ── Recuperar senha ──
   const handleForgotPassword = () => {
     if (!email.trim()) {
-      Alert.alert('Recuperar senha', 'Digite seu email no campo acima e tente novamente.');
+      Alert.alert('Recuperar senha', 'Digite seu email acima primeiro.');
       return;
     }
     if (!validateEmail(email.trim())) {
-      Alert.alert('Email inválido', 'Digite um email válido para recuperar a senha.');
+      Alert.alert('Email inválido', 'Digite um email válido para continuar.');
       return;
     }
     Alert.alert(
@@ -140,8 +170,8 @@ export default function LoginScreen({ navigation }: Props) {
               Alert.alert('Email enviado!', 'Verifique sua caixa de entrada e spam.');
             } catch (e: any) {
               Alert.alert('Erro', e.code === 'auth/user-not-found'
-                ? 'Nenhuma conta encontrada com este email.'
-                : 'Não foi possível enviar o email de recuperação.');
+                ? 'Nenhuma conta com este email.'
+                : 'Não foi possível enviar o email.');
             }
           },
         },
@@ -149,17 +179,26 @@ export default function LoginScreen({ navigation }: Props) {
     );
   };
 
-  const clearError = (field: keyof FormErrors) => {
-    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
-  };
-
   return (
     <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
 
-      {/* ── Círculos decorativos de fundo ── */}
-      <View style={s.circleTopRight} pointerEvents="none" />
+      {/* ── Listras diagonais de fundo ── */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {Array.from({ length: STRIPE_COUNT }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              s.stripe,
+              { left: i * STRIPE_GAP - H * 0.3 },
+            ]}
+          />
+        ))}
+      </View>
+
+      {/* ── Círculos decorativos ── */}
+      <View style={s.circleTopRight}  pointerEvents="none" />
       <View style={s.circleBottomLeft} pointerEvents="none" />
-      <View style={s.circleCenter} pointerEvents="none" />
+      <View style={s.circleCenter}    pointerEvents="none" />
 
       <KeyboardAvoidingView
         style={s.flex}
@@ -171,8 +210,13 @@ export default function LoginScreen({ navigation }: Props) {
           showsVerticalScrollIndicator={false}
         >
 
-          {/* ── Hero ── */}
-          <View style={s.hero}>
+          {/* ── Hero animado ── */}
+          <Animated.View
+            style={[
+              s.hero,
+              { opacity: heroOpacity, transform: [{ translateY: heroTranslateY }] },
+            ]}
+          >
             <View style={s.logoGlow}>
               <View style={s.logoCircle}>
                 <Text style={s.logoEmoji}>💈</Text>
@@ -180,10 +224,22 @@ export default function LoginScreen({ navigation }: Props) {
             </View>
             <Text style={s.appName}>Barbershop</Text>
             <Text style={s.tagline}>Seu corte, do seu jeito</Text>
-          </View>
 
-          {/* ── Card formulário ── */}
-          <View style={s.card}>
+            {/* Divider decorativo âmbar */}
+            <View style={s.divider}>
+              <View style={s.dividerLine} />
+              <View style={s.dividerDot} />
+              <View style={s.dividerLine} />
+            </View>
+          </Animated.View>
+
+          {/* ── Card animado ── */}
+          <Animated.View
+            style={[
+              s.card,
+              { opacity: cardOpacity, transform: [{ translateY: cardTranslateY }] },
+            ]}
+          >
             <Text style={s.cardTitle}>Entrar na conta</Text>
 
             {/* Email */}
@@ -191,13 +247,13 @@ export default function LoginScreen({ navigation }: Props) {
               <Text style={s.label}>EMAIL</Text>
               <View style={[
                 s.inputWrap,
-                emailFocused && s.inputWrapFocused,
-                errors.email ? s.inputWrapError : null,
+                emailFocused  && s.inputWrapFocused,
+                errors.email  && s.inputWrapError,
               ]}>
                 <Text style={s.inputIcon}>✉️</Text>
                 <TextInput
                   value={email}
-                  onChangeText={(t) => { setEmail(t); clearError('email'); }}
+                  onChangeText={t => { setEmail(t); clearError('email'); }}
                   style={s.input}
                   placeholder="seu@email.com"
                   placeholderTextColor={C.textMuted}
@@ -223,18 +279,18 @@ export default function LoginScreen({ navigation }: Props) {
               <Text style={s.label}>SENHA</Text>
               <View style={[
                 s.inputWrap,
-                senhaFocused && s.inputWrapFocused,
-                errors.senha ? s.inputWrapError : null,
+                senhaFocused  && s.inputWrapFocused,
+                errors.senha  && s.inputWrapError,
               ]}>
                 <Text style={s.inputIcon}>🔒</Text>
                 <TextInput
                   ref={senhaRef}
                   value={senha}
-                  onChangeText={(t) => { setSenha(t); clearError('senha'); }}
+                  onChangeText={t => { setSenha(t); clearError('senha'); }}
                   style={s.input}
                   placeholder="Sua senha"
                   placeholderTextColor={C.textMuted}
-                  secureTextEntry
+                  secureTextEntry={!mostrarSenha}
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="done"
@@ -243,6 +299,16 @@ export default function LoginScreen({ navigation }: Props) {
                   onBlur={() => setSenhaFocused(false)}
                   accessibilityLabel="Campo de senha"
                 />
+                {/* Toggle mostrar/ocultar senha */}
+                <TouchableOpacity
+                  onPress={() => setMostrarSenha(v => !v)}
+                  style={s.eyeBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={s.eyeIcon}>{mostrarSenha ? '🙈' : '👁️'}</Text>
+                </TouchableOpacity>
               </View>
               {errors.senha ? (
                 <View style={s.errorRow}>
@@ -251,23 +317,26 @@ export default function LoginScreen({ navigation }: Props) {
               ) : null}
             </View>
 
-            {/* Botão entrar */}
-            <TouchableOpacity
-              style={[s.loginBtn, loading && s.loginBtnDisabled]}
-              onPress={handleLogin}
-              disabled={loading}
-              accessibilityRole="button"
-              accessibilityLabel="Entrar no aplicativo"
-              accessibilityState={{ disabled: loading }}
-            >
-              {loading ? (
-                <ActivityIndicator color="#000" />
-              ) : (
-                <Text style={s.loginBtnText}>Entrar →</Text>
-              )}
-            </TouchableOpacity>
+            {/* Botão principal com scale feedback */}
+            <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+              <TouchableOpacity
+                style={[s.loginBtn, loading && s.loginBtnDisabled]}
+                onPress={handleLogin}
+                onPressIn={onPressIn}
+                onPressOut={onPressOut}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel="Entrar no aplicativo"
+                accessibilityState={{ disabled: loading }}
+              >
+                {loading
+                  ? <ActivityIndicator color="#000" />
+                  : <Text style={s.loginBtnText}>Entrar  →</Text>
+                }
+              </TouchableOpacity>
+            </Animated.View>
 
-            {/* Esqueci senha */}
+            {/* Esqueci a senha */}
             <TouchableOpacity
               style={s.forgotBtn}
               onPress={handleForgotPassword}
@@ -275,10 +344,15 @@ export default function LoginScreen({ navigation }: Props) {
             >
               <Text style={s.forgotText}>Esqueceu sua senha?</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
 
           {/* ── Criar conta ── */}
-          <View style={s.registerSection}>
+          <Animated.View
+            style={[
+              s.registerSection,
+              { opacity: cardOpacity },
+            ]}
+          >
             <Text style={s.registerPrompt}>Ainda não tem conta?</Text>
             <TouchableOpacity
               style={s.registerBtn}
@@ -288,7 +362,7 @@ export default function LoginScreen({ navigation }: Props) {
             >
               <Text style={s.registerBtnText}>Criar conta grátis</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
 
         </ScrollView>
       </KeyboardAvoidingView>
@@ -296,6 +370,7 @@ export default function LoginScreen({ navigation }: Props) {
   );
 }
 
+// ─── Estilos ──────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -303,7 +378,17 @@ const s = StyleSheet.create({
   },
   flex: { flex: 1 },
 
-  // ── Círculos decorativos ──
+  // ── Listras ──
+  stripe: {
+    position: 'absolute',
+    top: 0,
+    width: STRIPE_W,
+    height: H * 1.6,
+    backgroundColor: C.stripe,
+    transform: [{ rotate: '20deg' }],
+  },
+
+  // ── Círculos ──
   circleTopRight: {
     position: 'absolute',
     width: W * 0.85,
@@ -343,7 +428,7 @@ const s = StyleSheet.create({
   hero: {
     alignItems: 'center',
     paddingTop: 24,
-    marginBottom: 36,
+    marginBottom: 28,
   },
   logoGlow: {
     width: 110,
@@ -352,12 +437,12 @@ const s = StyleSheet.create({
     backgroundColor: C.amberGlow,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 18,
   },
   logoCircle: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     backgroundColor: C.amber,
     justifyContent: 'center',
     alignItems: 'center',
@@ -367,9 +452,7 @@ const s = StyleSheet.create({
     shadowRadius: 14,
     elevation: 10,
   },
-  logoEmoji: {
-    fontSize: 42,
-  },
+  logoEmoji: { fontSize: 40 },
   appName: {
     fontSize: 36,
     fontWeight: '800',
@@ -381,6 +464,25 @@ const s = StyleSheet.create({
     fontSize: 15,
     color: C.textSec,
     letterSpacing: 0.2,
+    marginBottom: 20,
+  },
+  // Divider âmbar decorativo
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dividerLine: {
+    width: 48,
+    height: 1,
+    backgroundColor: C.amber,
+    opacity: 0.4,
+  },
+  dividerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: C.amber,
   },
 
   // ── Card ──
@@ -393,9 +495,9 @@ const s = StyleSheet.create({
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
   cardTitle: {
     fontSize: 20,
@@ -405,9 +507,9 @@ const s = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.2,
   },
-  fieldGroup: {
-    marginBottom: 18,
-  },
+
+  // ── Campos ──
+  fieldGroup: { marginBottom: 18 },
   label: {
     fontSize: 11,
     fontWeight: '700',
@@ -426,11 +528,11 @@ const s = StyleSheet.create({
     minHeight: 52,
   },
   inputWrapFocused: {
-    borderColor: C.inputFocus,
+    borderColor: C.amber,
     shadowColor: C.amber,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
     elevation: 4,
   },
   inputWrapError: {
@@ -445,6 +547,14 @@ const s = StyleSheet.create({
     fontSize: 16,
     color: C.text,
     paddingVertical: 0,
+  },
+  eyeBtn: {
+    paddingLeft: 8,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  eyeIcon: {
+    fontSize: 18,
   },
   errorRow: {
     marginTop: 6,
@@ -468,10 +578,10 @@ const s = StyleSheet.create({
     marginTop: 8,
     minHeight: 54,
     justifyContent: 'center',
-    shadowColor: C.amber,
+    shadowColor: C.amberShadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
+    shadowOpacity: 1,
+    shadowRadius: 12,
     elevation: 6,
   },
   loginBtnDisabled: {
@@ -483,7 +593,7 @@ const s = StyleSheet.create({
     color: '#000',
     fontSize: 17,
     fontWeight: '800',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   forgotBtn: {
     alignItems: 'center',
