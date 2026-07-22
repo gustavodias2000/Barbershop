@@ -19,6 +19,11 @@ import ConfigServicosScreen from './src/screens/ConfigServicosScreen';
 import TemplatesMensagemScreen from './src/screens/TemplatesMensagemScreen';
 import ClientesBanidosScreen from './src/screens/ClientesBanidosScreen';
 import HistoricoClienteScreen from './src/screens/HistoricoClienteScreen';
+import QRCodeScreen from './src/screens/QRCodeScreen';
+import SuporteScreen from './src/screens/SuporteScreen';
+import ListaEsperaScreen from './src/screens/ListaEsperaScreen';
+import RecorrenciasScreen from './src/screens/RecorrenciasScreen';
+import CriarRecorrenciaScreen from './src/screens/CriarRecorrenciaScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -123,6 +128,33 @@ export default function App() {
             component={HistoricoClienteScreen}
             options={({ route }) => ({
               title: `Histórico — ${route.params.clienteNome}`,
+            })}
+          />
+          <Stack.Screen
+            name="QRCode"
+            component={QRCodeScreen}
+            options={{ title: 'QR Code de Agendamento' }}
+          />
+          <Stack.Screen
+            name="Suporte"
+            component={SuporteScreen}
+            options={{ title: 'Ajuda e Suporte' }}
+          />
+          <Stack.Screen
+            name="ListaEspera"
+            component={ListaEsperaScreen}
+            options={{ title: 'Lista de Espera' }}
+          />
+          <Stack.Screen
+            name="Recorrencias"
+            component={RecorrenciasScreen}
+            options={{ title: 'Recorrências' }}
+          />
+          <Stack.Screen
+            name="CriarRecorrencia"
+            component={CriarRecorrenciaScreen}
+            options={({ route }) => ({
+              title: `Recorrência — ${route.params.clienteNome}`,
             })}
           />
         </Stack.Navigator>

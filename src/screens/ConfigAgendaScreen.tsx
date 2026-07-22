@@ -14,6 +14,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  TextInput,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -77,6 +78,7 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
   const s = getStyles(theme);
 
   const [config, setConfig] = useState<ConfiguracaoAgenda>(DEFAULT_CONFIG);
+  const [mensagemPos, setMensagemPos] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [almoco, setAlmoco] = useState(true); // toggle do intervalo de almoço
@@ -94,6 +96,9 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
         const c = barbeiro.configuracaoAgenda;
         setConfig(c);
         setAlmoco(!!c.almocoInicio && !!c.almocoFim);
+      }
+      if (barbeiro?.mensagemPosAgendamento) {
+        setMensagemPos(barbeiro.mensagemPosAgendamento);
       }
     } catch (error) {
       console.error('Erro ao carregar configuração:', error);
@@ -135,7 +140,10 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
     try {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
-      await upsertBarbeiro(uid, { configuracaoAgenda: configToSave });
+      await upsertBarbeiro(uid, {
+        configuracaoAgenda: configToSave,
+        mensagemPosAgendamento: mensagemPos.trim() || undefined,
+      });
       Alert.alert('Sucesso!', 'Configuração de horários salva.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -333,6 +341,26 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
           </ScrollView>
         </View>
 
+        {/* Mensagem pós-agendamento */}
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Mensagem pós-agendamento</Text>
+          <Text style={s.hint}>
+            Texto exibido ao cliente logo após confirmar o agendamento. Ex.: endereço,
+            instruções de preparo ou um recado especial. Deixe em branco para não exibir.
+          </Text>
+          <TextInput
+            style={s.textArea}
+            value={mensagemPos}
+            onChangeText={setMensagemPos}
+            placeholder="Ex.: Nos vemos na Rua das Flores, 42. Chegue 5 min antes! 😊"
+            placeholderTextColor={theme.colors.textMuted}
+            multiline
+            numberOfLines={3}
+            maxLength={300}
+          />
+          <Text style={s.charCount}>{mensagemPos.length}/300</Text>
+        </View>
+
         {/* Botão salvar */}
         <TouchableOpacity
           style={[s.saveButton, saving && s.saveButtonDisabled]}
@@ -456,6 +484,24 @@ const getStyles = (theme: Theme) =>
       color: theme.colors.textMuted,
       marginBottom: 10,
       lineHeight: 17,
+    },
+    textArea: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 14,
+      color: theme.colors.text,
+      backgroundColor: theme.colors.surfaceVariant,
+      minHeight: 80,
+      textAlignVertical: 'top',
+    },
+    charCount: {
+      fontSize: 11,
+      color: theme.colors.textMuted,
+      textAlign: 'right',
+      marginTop: 4,
     },
     saveButton: {
       backgroundColor: theme.colors.primary,

@@ -401,6 +401,30 @@ export default function BarbeiroHome({ navigation }: Props) {
               desc: 'Gerencie clientes que não podem agendar',
               route: 'ClientesBanidos' as const,
             },
+            {
+              icon: '⏳',
+              label: 'Lista de Espera',
+              desc: 'Veja clientes aguardando um horário disponível',
+              route: 'ListaEspera' as const,
+            },
+            {
+              icon: '🔄',
+              label: 'Recorrências',
+              desc: 'Gerencie agendamentos periódicos de clientes fiéis',
+              route: 'Recorrencias' as const,
+            },
+            {
+              icon: '🔲',
+              label: 'QR Code',
+              desc: 'Exiba o QR Code para clientes agendarem pelo app',
+              route: 'QRCode' as const,
+            },
+            {
+              icon: '❓',
+              label: 'Ajuda e Suporte',
+              desc: 'FAQ e contato com o suporte Barbershop',
+              route: 'Suporte' as const,
+            },
           ].map((item) => (
             <TouchableOpacity
               key={item.route}

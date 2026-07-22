@@ -25,6 +25,7 @@ import CalendarService from '../services/CalendarService';
 import { getHorariosOcupados, marcarOcupado } from '../services/OcupacaoService';
 import { criarAgendamento } from '../data/repositories/AgendamentoRepository';
 import { getBarbeiro } from '../data/repositories/BarbeiroRepository';
+import { entrarNaFila, jaEstaNaFila } from '../data/repositories/ListaEsperaRepository';
 import useUserProfile from '../hooks/useUserProfile';
 import { formatMoney, precoParaCentavos, toLocalDateString } from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
@@ -138,6 +139,8 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
   const [loadingHorarios, setLoadingHorarios] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [createdAgendamento, setCreatedAgendamento] = useState<NovoAgendamento | null>(null);
+  const [waitlistJoined, setWaitlistJoined] = useState(false);
+  const [mensagemPosAgendamento, setMensagemPosAgendamento] = useState<string | null>(null);
 
   const todayStr = toLocalDateString(new Date());
 
@@ -169,6 +172,8 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
       setServicos(svcs);
       if (svcs.length > 0) setServicoSelecionado(svcs[0]);
 
+      setMensagemPosAgendamento(dados?.mensagemPosAgendamento ?? null);
+
       const dates = getDatesDisponiveis(cfg);
       setDatesDisponiveis(dates);
       if (dates.length > 0) setSelectedDate(dates[0].date);
@@ -187,6 +192,7 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (selectedDate && servicoSelecionado) {
+      setWaitlistJoined(false);
       fetchHorariosDisponiveis();
       setTimeout(() => {
         scrollRef.current?.scrollTo({ y: 260, animated: true });
@@ -233,6 +239,48 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
       setAvailableTimes([]);
     } finally {
       setLoadingHorarios(false);
+    }
+  };
+
+  // ─── Lista de espera ─────────────────────────────────────────────────────
+
+  const handleEntrarFila = async () => {
+    if (!selectedDate || !servicoSelecionado) {
+      Alert.alert('Atenção', 'Selecione uma data e um serviço antes de entrar na lista.');
+      return;
+    }
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      Alert.alert('Erro', 'Usuário não autenticado.');
+      return;
+    }
+    try {
+      const jaEsta = await jaEstaNaFila(barbeiro.id, uid, selectedDate);
+      if (jaEsta) {
+        Alert.alert('Aviso', 'Você já está na lista de espera para esta data.');
+        setWaitlistJoined(true);
+        return;
+      }
+      const userEmail = auth.currentUser?.email || '';
+      const clienteNome = userProfile?.nome || userEmail.split('@')[0];
+      await entrarNaFila({
+        barbeiroId: barbeiro.id,
+        clienteUid: uid,
+        clienteNome,
+        clienteEmail: userEmail,
+        clienteTelefone: userProfile?.telefone,
+        data: selectedDate,
+        servicoId: servicoSelecionado.id,
+        servicoNome: servicoSelecionado.nome,
+      });
+      setWaitlistJoined(true);
+      Alert.alert(
+        '✅ Lista de espera!',
+        `Você foi adicionado à lista de espera para ${selectedDate}. ${barbeiro.nome} irá te notificar quando abrir um horário.`,
+      );
+    } catch (error) {
+      console.error('Erro ao entrar na fila:', error);
+      Alert.alert('Erro', 'Não foi possível entrar na lista de espera. Tente novamente.');
     }
   };
 
@@ -315,11 +363,12 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
         ? await WhatsAppService.sendTextMessage(barbeiroPhone, mensagem)
         : false;
 
+      const extraMsg = mensagemPosAgendamento ? `\n\n${mensagemPosAgendamento}` : '';
       Alert.alert(
         whatsappEnviado ? 'Sucesso!' : 'Agendamento Pago',
-        whatsappEnviado
+        (whatsappEnviado
           ? 'Agendamento pago e confirmado! Mensagem enviada via WhatsApp.'
-          : 'Agendamento pago com sucesso! Entre em contato para confirmar.',
+          : 'Agendamento pago com sucesso! Entre em contato para confirmar.') + extraMsg,
         [
           { text: 'OK', onPress: () => navigation.goBack() },
           {
@@ -487,8 +536,26 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
                 <Text style={s.noTimesText}>
                   {selectedDate === todayStr
                     ? 'Não há horários disponíveis para hoje. Escolha outro dia.'
-                    : 'Não há horários disponíveis para esta data. Escolha outro dia.'}
+                    : 'Não há horários disponíveis para esta data.'}
                 </Text>
+                {selectedDate !== todayStr && (
+                  waitlistJoined ? (
+                    <View style={s.waitlistConfirmado}>
+                      <Text style={s.waitlistConfirmadoText}>
+                        ✅ Você está na lista de espera para esta data!
+                      </Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={s.waitlistButton}
+                      onPress={handleEntrarFila}
+                    >
+                      <Text style={s.waitlistButtonText}>
+                        📋 Entrar na lista de espera
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                )}
               </View>
             )}
           </View>
@@ -717,6 +784,31 @@ const getStyles = (theme: Theme) =>
     noTimesText: {
       fontSize: 15,
       color: theme.colors.textSecondary,
+      textAlign: 'center',
+      marginBottom: 12,
+    },
+    waitlistButton: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    waitlistButtonText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    waitlistConfirmado: {
+      alignItems: 'center',
+      paddingVertical: 8,
+    },
+    waitlistConfirmadoText: {
+      fontSize: 14,
+      color: theme.colors.success,
+      fontWeight: '600',
       textAlign: 'center',
     },
     // Resumo

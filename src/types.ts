@@ -99,6 +99,8 @@ export interface Barbeiro {
   templatesMensagem?: TemplatesMensagem;
   /** Lista de clientes banidos pelo barbeiro */
   clientesBanidos?: ClienteBanido[];
+  /** Mensagem exibida ao cliente após confirmar o agendamento */
+  mensagemPosAgendamento?: string;
   createdAt?: FirestoreDate;
   updatedAt?: FirestoreDate;
 }
@@ -143,6 +145,44 @@ export interface Avaliacao {
   createdAt?: FirestoreDate;
 }
 
+// ─── Lista de espera ──────────────────────────────────────────────────────────
+
+export interface EntradaListaEspera {
+  id: string;
+  barbeiroId: string;
+  clienteUid: string;
+  clienteNome: string;
+  clienteEmail: string;
+  clienteTelefone?: string;
+  data: DataISO;       // data desejada
+  servicoId?: string;
+  servicoNome?: string;
+  status: 'aguardando' | 'notificado' | 'agendado' | 'expirado';
+  createdAt?: FirestoreDate;
+}
+
+// ─── Agendamentos recorrentes ─────────────────────────────────────────────────
+
+export type FrequenciaRecorrencia = 'semanal' | 'quinzenal' | 'mensal';
+
+export interface Recorrencia {
+  id: string;
+  barbeiroId: string;
+  clienteUid: string;
+  clienteNome: string;
+  clienteEmail: string;
+  clienteTelefone?: string;
+  servicoId: string;
+  servicoNome: string;
+  precoEmCentavos: number;
+  diaSemana: number;         // 0=dom ... 6=sab
+  horario: Horario;          // "09:00"
+  frequencia: FrequenciaRecorrencia;
+  ativo: boolean;
+  ultimoAgendamento?: DataISO;
+  createdAt?: FirestoreDate;
+}
+
 // ─── Navegação ───────────────────────────────────────────────────────────────
 
 export type RootStackParamList = {
@@ -161,4 +201,15 @@ export type RootStackParamList = {
   TemplatesMensagem: undefined;
   ClientesBanidos: undefined;
   HistoricoCliente: { clienteUid: string; clienteNome: string; barbeiroId: string };
+  QRCode: undefined;
+  Suporte: undefined;
+  ListaEspera: undefined;
+  Recorrencias: undefined;
+  CriarRecorrencia: {
+    clienteUid: string;
+    clienteNome: string;
+    clienteEmail: string;
+    clienteTelefone?: string;
+    barbeiroId: string;
+  };
 };

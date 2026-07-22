@@ -212,6 +212,22 @@ export default function HistoricoClienteScreen({ route, navigation }: Props) {
               </View>
             </View>
 
+            {/* Botão criar recorrência */}
+            <TouchableOpacity
+              style={s.recorrenciaButton}
+              onPress={() =>
+                navigation.navigate('CriarRecorrencia', {
+                  clienteUid,
+                  clienteNome,
+                  clienteEmail: agendamentos[0]?.cliente ?? '',
+                  clienteTelefone: agendamentos[0]?.clienteTelefone,
+                  barbeiroId,
+                })
+              }
+            >
+              <Text style={s.recorrenciaButtonText}>🔄 Criar recorrência</Text>
+            </TouchableOpacity>
+
             {/* Botão banir */}
             <TouchableOpacity
               style={[s.banirButton, banindo && s.banirButtonDisabled]}
@@ -301,6 +317,21 @@ const getStyles = (theme: Theme) =>
     statLabel: {
       fontSize: 12,
       color: theme.colors.textMuted,
+    },
+    recorrenciaButton: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: 10,
+      paddingVertical: 14,
+      alignItems: 'center',
+      marginTop: 4,
+      marginBottom: 10,
+      minHeight: 48,
+      justifyContent: 'center',
+    },
+    recorrenciaButtonText: {
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: '700',
     },
     banirButton: {
       backgroundColor: theme.colors.error,
