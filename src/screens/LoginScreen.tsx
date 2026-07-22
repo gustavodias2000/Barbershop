@@ -182,7 +182,9 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
+    // Android: edges apenas 'top' — bottom é gerenciado pelo adjustResize do AndroidManifest.
+    // 'bottom' junto com adjustResize causa duplo recálculo de inset ao abrir o teclado.
+    <SafeAreaView style={s.safeArea} edges={['top']}>
 
       {/* ── Listras diagonais de fundo ── */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -530,14 +532,17 @@ const s = StyleSheet.create({
     borderColor: C.inputBorder,
     paddingHorizontal: 14,
     minHeight: 52,
+    // Elevation FIXA — nunca muda com o foco.
+    // No Android, mudar elevation no onFocus (0 → 4) gera evento de layout
+    // que o sistema interpreta como motivo para fechar o teclado.
+    elevation: 2,
   },
   inputWrapFocused: {
+    // Apenas muda a cor da borda — sem alterar elevation, shadow ou dimensões.
+    // Qualquer mudança de layout/elevation aqui conflita com adjustResize no Android.
     borderColor: C.amber,
-    shadowColor: C.amber,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    // shadowColor/shadowOffset/shadowOpacity/shadowRadius são iOS-only;
+    // no Android não têm efeito, por isso foram removidos daqui.
   },
   inputWrapError: {
     borderColor: C.error,
