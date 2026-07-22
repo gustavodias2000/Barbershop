@@ -411,6 +411,19 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
           <Text style={s.subtitle}>{barbeiro.especialidade || 'Barbearia'}</Text>
         </View>
 
+        {/* Aviso quando barbeiro não tem serviços cadastrados */}
+        {servicos.length === 0 && !loading && (
+          <View style={s.alertBanner}>
+            <Text style={s.alertBannerIcon}>⚠️</Text>
+            <View style={s.alertBannerText}>
+              <Text style={s.alertBannerTitle}>Serviços não configurados</Text>
+              <Text style={s.alertBannerDesc}>
+                Este barbeiro ainda não cadastrou os serviços disponíveis. Tente novamente mais tarde ou entre em contato.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Seleção de serviço */}
         {servicos.length > 0 && (
           <View style={s.section}>
@@ -881,5 +894,36 @@ const getStyles = (theme: Theme) =>
       color: '#fff',
       fontSize: 17,
       fontWeight: 'bold',
+    },
+    // Banner de aviso quando barbeiro não tem serviços cadastrados
+    alertBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: '#FEF3C7',
+      borderColor: '#F59E0B',
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 14,
+      margin: 16,
+      marginBottom: 0,
+    },
+    alertBannerIcon: {
+      fontSize: 20,
+      marginRight: 10,
+      marginTop: 1,
+    },
+    alertBannerText: {
+      flex: 1,
+    },
+    alertBannerTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#92400E',
+      marginBottom: 3,
+    },
+    alertBannerDesc: {
+      fontSize: 13,
+      color: '#92400E',
+      lineHeight: 18,
     },
   });

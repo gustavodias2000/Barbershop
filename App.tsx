@@ -4,11 +4,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ThemeProvider } from './src/context/ThemeContext';
 import type { RootStackParamList } from './src/types';
 
+// Navegação por tabs
+import BarbeiroTabs from './src/navigation/BarbeiroTabs';
+import ClienteTabs from './src/navigation/ClienteTabs';
+
 // Telas
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
-import ClienteHome from './src/screens/ClienteHome';
-import BarbeiroHome from './src/screens/BarbeiroHome';
 import AgendamentoScreen from './src/screens/AgendamentoScreen';
 import HistoricoScreen from './src/screens/HistoricoScreen';
 import PaymentScreen from './src/screens/PaymentScreen';
@@ -59,14 +61,11 @@ export default function App() {
             options={{ headerShown: false }}
           />
 
-          {/* Cliente */}
+          {/* Cliente — Tab Navigator */}
           <Stack.Screen
             name="Cliente"
-            component={ClienteHome}
-            options={{
-              title: 'Barbershop',
-              headerLeft: () => null, // Impede voltar para login
-            }}
+            component={ClienteTabs}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="Agendamento"
@@ -84,14 +83,11 @@ export default function App() {
             options={{ title: 'Pagamento' }}
           />
 
-          {/* Barbeiro */}
+          {/* Barbeiro — Tab Navigator */}
           <Stack.Screen
             name="Barbeiro"
-            component={BarbeiroHome}
-            options={{
-              title: 'Painel do Barbeiro',
-              headerLeft: () => null, // Impede voltar para login
-            }}
+            component={BarbeiroTabs}
+            options={{ headerShown: false }}
           />
 
           {/* Compartilhadas */}

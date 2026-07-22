@@ -20,10 +20,15 @@ import { formatPreco } from '../utils/dateUtils';
 import { SkeletonList } from '../components/Skeleton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ONBOARDING_KEY } from './OnboardingScreen';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, Barbeiro, Agendamento } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Cliente'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<any, 'Barbeiros'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 export default function ClienteHome({ navigation }: Props) {
   const { theme } = useTheme();
@@ -157,44 +162,6 @@ export default function ClienteHome({ navigation }: Props) {
           <Text style={s.greeting}>Olá, {nomeExibido}!</Text>
           <Text style={s.title}>Barbeiros Disponíveis</Text>
         </View>
-        <View style={s.headerButtons}>
-          <TouchableOpacity
-            style={s.perfilButton}
-            accessibilityRole="button"
-            accessibilityLabel="Meu perfil"
-            onPress={() => navigation.navigate('Perfil')}
-          >
-            <Text style={s.perfilButtonText}>👤</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.historicoButton}
-            accessibilityRole="button"
-            accessibilityLabel="Ver histórico de agendamentos"
-            onPress={() => navigation.navigate('Historico')}
-          >
-            <Text style={s.historicoButtonText}>Histórico</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.logoutButton}
-            accessibilityRole="button"
-            accessibilityLabel="Sair do aplicativo"
-            onPress={() =>
-              Alert.alert('Sair', 'Deseja realmente sair?', [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                  text: 'Sair',
-                  style: 'destructive',
-                  onPress: async () => {
-                    await auth.signOut();
-                    navigation.replace('Login');
-                  },
-                },
-              ])
-            }
-          >
-            <Text style={s.logoutButtonText}>🚪</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       <FlatList
@@ -274,48 +241,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: theme.colors.text,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  perfilButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.surfaceVariant,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  perfilButtonText: {
-    fontSize: 20,
-  },
-  historicoButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  historicoButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  logoutButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.surfaceVariant,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  logoutButtonText: {
-    fontSize: 20,
   },
   agendamentosSection: {
     backgroundColor: theme.colors.surface,

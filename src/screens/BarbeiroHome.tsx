@@ -1,3 +1,7 @@
+/**
+ * BarbeiroHome — aba "Agenda" do Bottom Tab Navigator do barbeiro.
+ * Exibe os agendamentos do dia, stats e ações (confirmar/cancelar/concluir).
+ */
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -7,17 +11,15 @@ import {
   StyleSheet,
   Alert,
   RefreshControl,
-  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import WhatsAppService from '../services/WhatsAppService';
-import AnalyticsDashboard from '../components/AnalyticsDashboard';
-import { liberarSlot } from '../services/OcupacaoService';
 import {
   listarDoBarbeiro,
   atualizarStatus,
 } from '../data/repositories/AgendamentoRepository';
+import { liberarSlot } from '../services/OcupacaoService';
 import useUserProfile from '../hooks/useUserProfile';
 import { formatDateTime, formatPreco } from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
@@ -25,10 +27,16 @@ import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { SkeletonList } from '../components/Skeleton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ONBOARDING_KEY } from './OnboardingScreen';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, Agendamento } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Barbeiro'>;
+// Pode ser chamado tanto de um tab navigator quanto do stack diretamente
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<any, 'Agenda'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 export default function BarbeiroHome({ navigation }: Props) {
   const { theme } = useTheme();
@@ -38,8 +46,6 @@ export default function BarbeiroHome({ navigation }: Props) {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [stats, setStats] = useState({ pendentes: 0, confirmados: 0, total: 0 });
 
   useEffect(() => {
@@ -53,21 +59,17 @@ export default function BarbeiroHome({ navigation }: Props) {
       if (!visto) {
         navigation.navigate('Onboarding', { tipo: 'barbeiro' });
       }
-    } catch (_) {
-      // ignora falha no storage
-    }
+    } catch (_) {}
   };
 
   const fetchAgendamentos = async () => {
     try {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
-
       const data = await listarDoBarbeiro(uid, 50);
-
       setAgendamentos(data);
       setStats({
-        pendentes: data.filter((ag) => ag.status === 'pendente').length,
+        pendentes:  data.filter((ag) => ag.status === 'pendente').length,
         confirmados: data.filter((ag) => ag.status === 'confirmado').length,
         total: data.length,
       });
@@ -88,140 +90,88 @@ export default function BarbeiroHome({ navigation }: Props) {
     }
   };
 
-  const confirmar = async (agendamento: Agendamento) => {
-    Alert.alert(
-      'Confirmar Agendamento',
-      `Confirmar agendamento de ${agendamento.clienteNome}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Confirmar',
-          onPress: async () => {
-            try {
-              await atualizarStatus(agendamento.id, 'confirmado');
-
-              const clienteTelefone = agendamento.clienteTelefone;
-              if (clienteTelefone) {
-                const barbeiroNome =
-                  userProfile?.nome ||
-                  auth.currentUser?.email?.split('@')[0] ||
-                  'Barbeiro';
-
-                const mensagem = WhatsAppService.gerarMensagemConfirmacao(
-                  { nome: agendamento.clienteNome, telefone: clienteTelefone },
-                  agendamento.data,
-                  agendamento.horario,
-                  barbeiroNome,
-                );
-
-                const enviado = await WhatsAppService.sendTextMessage(
-                  clienteTelefone,
-                  mensagem,
-                );
-
-                Alert.alert(
-                  'Sucesso!',
-                  enviado
-                    ? 'Agendamento confirmado e cliente notificado via WhatsApp!'
-                    : 'Agendamento confirmado. Cliente sem WhatsApp cadastrado.',
-                );
-              } else {
-                Alert.alert('Sucesso!', 'Agendamento confirmado.');
-              }
-
-              await fetchAgendamentos();
-            } catch (error) {
-              console.error('Erro ao confirmar:', error);
-              Alert.alert('Erro', 'Não foi possível confirmar o agendamento.');
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const cancelar = async (agendamento: Agendamento) => {
-    Alert.alert(
-      'Cancelar Agendamento',
-      `Cancelar agendamento de ${agendamento.clienteNome}?`,
-      [
-        { text: 'Não', style: 'cancel' },
-        {
-          text: 'Sim, cancelar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await atualizarStatus(agendamento.id, 'cancelado', {
-                cancelledBy: 'barbeiro',
-              });
-
-              await liberarSlot(
-                agendamento.barbeiroId,
-                agendamento.data,
-                agendamento.horario,
+  const confirmar = async (ag: Agendamento) => {
+    Alert.alert('Confirmar', `Confirmar agendamento de ${ag.clienteNome}?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Confirmar',
+        onPress: async () => {
+          try {
+            await atualizarStatus(ag.id, 'confirmado');
+            if (ag.clienteTelefone) {
+              const barbeiroNome = userProfile?.nome || auth.currentUser?.email?.split('@')[0] || 'Barbeiro';
+              const msg = WhatsAppService.gerarMensagemConfirmacao(
+                { nome: ag.clienteNome, telefone: ag.clienteTelefone },
+                ag.data, ag.horario, barbeiroNome,
               );
-
-              const clienteTelefone = agendamento.clienteTelefone;
-              if (clienteTelefone) {
-                const mensagem = WhatsAppService.gerarMensagemCancelamento(
-                  { nome: agendamento.clienteNome, telefone: clienteTelefone },
-                  agendamento.data,
-                  agendamento.horario,
-                  'Reagendamento necessário',
-                );
-                const enviado = await WhatsAppService.sendTextMessage(
-                  clienteTelefone,
-                  mensagem,
-                );
-                Alert.alert(
-                  'Cancelado',
-                  enviado
-                    ? 'Agendamento cancelado e cliente notificado via WhatsApp.'
-                    : 'Agendamento cancelado.',
-                );
-              } else {
-                Alert.alert('Cancelado', 'Agendamento cancelado.');
-              }
-
-              await fetchAgendamentos();
-            } catch (error) {
-              console.error('Erro ao cancelar:', error);
-              Alert.alert('Erro', 'Não foi possível cancelar o agendamento.');
+              const enviado = await WhatsAppService.sendTextMessage(ag.clienteTelefone, msg);
+              Alert.alert('Sucesso!', enviado
+                ? 'Confirmado e cliente notificado via WhatsApp!'
+                : 'Confirmado. Cliente sem WhatsApp cadastrado.');
+            } else {
+              Alert.alert('Sucesso!', 'Agendamento confirmado.');
             }
-          },
+            await fetchAgendamentos();
+          } catch {
+            Alert.alert('Erro', 'Não foi possível confirmar.');
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
-  const concluir = async (agendamento: Agendamento) => {
-    Alert.alert(
-      'Concluir Atendimento',
-      `Marcar atendimento de ${agendamento.clienteNome} como concluído?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Concluir',
-          onPress: async () => {
-            try {
-              await atualizarStatus(agendamento.id, 'concluido');
-              Alert.alert('Sucesso!', 'Atendimento marcado como concluído.');
-              await fetchAgendamentos();
-            } catch (error) {
-              console.error('Erro ao concluir:', error);
-              Alert.alert('Erro', 'Não foi possível concluir o atendimento.');
+  const cancelar = async (ag: Agendamento) => {
+    Alert.alert('Cancelar', `Cancelar agendamento de ${ag.clienteNome}?`, [
+      { text: 'Não', style: 'cancel' },
+      {
+        text: 'Sim, cancelar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await atualizarStatus(ag.id, 'cancelado', { cancelledBy: 'barbeiro' });
+            await liberarSlot(ag.barbeiroId, ag.data, ag.horario);
+            if (ag.clienteTelefone) {
+              const msg = WhatsAppService.gerarMensagemCancelamento(
+                { nome: ag.clienteNome, telefone: ag.clienteTelefone },
+                ag.data, ag.horario, 'Reagendamento necessário',
+              );
+              await WhatsAppService.sendTextMessage(ag.clienteTelefone, msg);
             }
-          },
+            Alert.alert('Cancelado', 'Agendamento cancelado.');
+            await fetchAgendamentos();
+          } catch {
+            Alert.alert('Erro', 'Não foi possível cancelar.');
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
+
+  const concluir = async (ag: Agendamento) => {
+    Alert.alert('Concluir', `Marcar atendimento de ${ag.clienteNome} como concluído?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Concluir',
+        onPress: async () => {
+          try {
+            await atualizarStatus(ag.id, 'concluido');
+            Alert.alert('Sucesso!', 'Atendimento concluído.');
+            await fetchAgendamentos();
+          } catch {
+            Alert.alert('Erro', 'Não foi possível concluir.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const barbeiroUid = auth.currentUser?.uid ?? '';
 
   const renderAgendamento = ({ item }: { item: Agendamento }) => (
-    <View style={s.agendamentoCard}>
-      <View style={s.agendamentoHeader}>
+    <View style={s.card}>
+      <View style={s.cardHeader}>
         <View style={s.clienteInfo}>
-          <View style={s.avatarContainer} accessibilityElementsHidden>
+          <View style={s.avatar} accessibilityElementsHidden>
             <Text style={s.avatarText}>
               {item.clienteNome ? item.clienteNome.charAt(0).toUpperCase() : 'C'}
             </Text>
@@ -239,16 +189,10 @@ export default function BarbeiroHome({ navigation }: Props) {
         </View>
       </View>
 
-      <View style={s.agendamentoInfo}>
-        <Text style={s.agendamentoData}>
-          📅 {item.data} às {item.horario}
-        </Text>
-        <Text style={s.agendamentoServico}>
-          ✂️ {item.servico || 'Corte e barba'} · {formatPreco(item)}
-        </Text>
-        <Text style={s.agendamentoCreated}>
-          Solicitado em: {formatDateTime(item.createdAt)}
-        </Text>
+      <View style={s.cardBody}>
+        <Text style={s.infoData}>📅 {item.data} às {item.horario}</Text>
+        <Text style={s.infoServico}>✂️ {item.servico || 'Corte e barba'} · {formatPreco(item)}</Text>
+        <Text style={s.infoCreated}>Solicitado em: {formatDateTime(item.createdAt)}</Text>
         {item.clienteUid ? (
           <TouchableOpacity
             onPress={() =>
@@ -259,51 +203,29 @@ export default function BarbeiroHome({ navigation }: Props) {
               })
             }
             accessibilityRole="button"
-            accessibilityLabel={`Ver histórico de ${item.clienteNome}`}
           >
-            <Text style={s.verHistoricoText}>📋 Ver histórico do cliente</Text>
+            <Text style={s.verHistorico}>📋 Ver histórico do cliente</Text>
           </TouchableOpacity>
         ) : null}
       </View>
 
       {item.status === 'pendente' && (
-        <View style={s.actionButtons}>
-          <TouchableOpacity
-            style={[s.actionButton, s.confirmarButton]}
-            accessibilityRole="button"
-            accessibilityLabel={`Confirmar agendamento de ${item.clienteNome}`}
-            onPress={() => confirmar(item)}
-          >
-            <Text style={s.actionButtonText}>Confirmar</Text>
+        <View style={s.actions}>
+          <TouchableOpacity style={[s.btn, s.btnConfirmar]} onPress={() => confirmar(item)}>
+            <Text style={s.btnText}>Confirmar</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.actionButton, s.cancelarButton]}
-            accessibilityRole="button"
-            accessibilityLabel={`Cancelar agendamento de ${item.clienteNome}`}
-            onPress={() => cancelar(item)}
-          >
-            <Text style={s.actionButtonText}>Cancelar</Text>
+          <TouchableOpacity style={[s.btn, s.btnCancelar]} onPress={() => cancelar(item)}>
+            <Text style={s.btnText}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       )}
-
       {item.status === 'confirmado' && (
-        <View style={s.actionButtons}>
-          <TouchableOpacity
-            style={[s.actionButton, s.concluirButton]}
-            accessibilityRole="button"
-            accessibilityLabel={`Marcar atendimento de ${item.clienteNome} como concluído`}
-            onPress={() => concluir(item)}
-          >
-            <Text style={s.actionButtonText}>Marcar Concluído</Text>
+        <View style={s.actions}>
+          <TouchableOpacity style={[s.btn, s.btnConcluir]} onPress={() => concluir(item)}>
+            <Text style={s.btnText}>Marcar Concluído</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.actionButton, s.cancelarButton]}
-            accessibilityRole="button"
-            accessibilityLabel={`Cancelar agendamento confirmado de ${item.clienteNome}`}
-            onPress={() => cancelar(item)}
-          >
-            <Text style={s.actionButtonText}>Cancelar</Text>
+          <TouchableOpacity style={[s.btn, s.btnCancelar]} onPress={() => cancelar(item)}>
+            <Text style={s.btnText}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -311,9 +233,8 @@ export default function BarbeiroHome({ navigation }: Props) {
   );
 
   if (loading) {
-    // Skeleton loading (item 17)
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={s.container} edges={['top']}>
         <SkeletonList count={4} />
       </SafeAreaView>
     );
@@ -322,324 +243,111 @@ export default function BarbeiroHome({ navigation }: Props) {
   const barbeiroNome = userProfile?.nome
     ? userProfile.nome.split(' ')[0]
     : 'Barbeiro';
-  const barbeiroUid = auth.currentUser?.uid || '';
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={s.container} edges={['top']}>
+      {/* Header simples — sem botões de navegação (movidos para tabs) */}
       <View style={s.header}>
         <View>
           <Text style={s.greeting}>Olá, {barbeiroNome}!</Text>
-          <Text style={s.title}>Painel do Barbeiro</Text>
-        </View>
-        <View style={s.headerButtons}>
-          <TouchableOpacity
-            style={s.perfilButton}
-            accessibilityRole="button"
-            accessibilityLabel="Meu perfil"
-            onPress={() => navigation.navigate('Perfil')}
-          >
-            <Text style={s.perfilButtonText}>👤</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.iconHeaderButton}
-            accessibilityRole="button"
-            accessibilityLabel="Configurações"
-            onPress={() => {
-              setShowSettings(!showSettings);
-              setShowAnalytics(false);
-            }}
-          >
-            <Text style={s.iconHeaderButtonText}>⚙️</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.analyticsButton}
-            accessibilityRole="button"
-            accessibilityLabel={showAnalytics ? 'Ver agenda' : 'Ver analytics'}
-            onPress={() => {
-              setShowAnalytics(!showAnalytics);
-              setShowSettings(false);
-            }}
-          >
-            <Text style={s.analyticsButtonText}>
-              {showAnalytics ? 'Agenda' : 'Analytics'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.profileButton}
-            accessibilityRole="button"
-            accessibilityLabel="Sair do aplicativo"
-            onPress={() =>
-              Alert.alert('Sair', 'Deseja realmente sair?', [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                  text: 'Sair',
-                  style: 'destructive',
-                  onPress: async () => {
-                    await auth.signOut();
-                    navigation.replace('Login');
-                  },
-                },
-              ])
-            }
-          >
-            <Text style={s.profileButtonText}>Sair</Text>
-          </TouchableOpacity>
+          <Text style={s.title}>Agenda</Text>
         </View>
       </View>
 
-      {showSettings ? (
-        <ScrollView contentContainerStyle={s.settingsContainer}>
-          <Text style={s.settingsTitle}>Configurações</Text>
-          {[
-            {
-              icon: '📅',
-              label: 'Horário de Atendimento',
-              desc: 'Configure dias, horários e intervalo de almoço',
-              route: 'ConfigAgenda' as const,
-            },
-            {
-              icon: '✂️',
-              label: 'Meus Serviços',
-              desc: 'Cadastre serviços com duração e preço',
-              route: 'ConfigServicos' as const,
-            },
-            {
-              icon: '💬',
-              label: 'Templates WhatsApp',
-              desc: 'Personalize mensagens de agendamento',
-              route: 'TemplatesMensagem' as const,
-            },
-            {
-              icon: '🚫',
-              label: 'Clientes Banidos',
-              desc: 'Gerencie clientes que não podem agendar',
-              route: 'ClientesBanidos' as const,
-            },
-            {
-              icon: '⏳',
-              label: 'Lista de Espera',
-              desc: 'Veja clientes aguardando um horário disponível',
-              route: 'ListaEspera' as const,
-            },
-            {
-              icon: '🔄',
-              label: 'Recorrências',
-              desc: 'Gerencie agendamentos periódicos de clientes fiéis',
-              route: 'Recorrencias' as const,
-            },
-            {
-              icon: '🔲',
-              label: 'QR Code',
-              desc: 'Exiba o QR Code para clientes agendarem pelo app',
-              route: 'QRCode' as const,
-            },
-            {
-              icon: '❓',
-              label: 'Ajuda e Suporte',
-              desc: 'FAQ e contato com o suporte Barbershop',
-              route: 'Suporte' as const,
-            },
-          ].map((item) => (
-            <TouchableOpacity
-              key={item.route}
-              style={s.settingsItem}
-              onPress={() => navigation.navigate(item.route)}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-            >
-              <Text style={s.settingsItemIcon}>{item.icon}</Text>
-              <View style={s.settingsItemText}>
-                <Text style={s.settingsItemLabel}>{item.label}</Text>
-                <Text style={s.settingsItemDesc}>{item.desc}</Text>
-              </View>
-              <Text style={s.settingsChevron}>›</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      ) : showAnalytics ? (
-        <AnalyticsDashboard barbeiroId={barbeiroUid} />
-      ) : (
-        <>
-          <View style={s.statsContainer}>
-            <View style={s.statCard}>
-              <Text style={s.statNumber}>{stats.pendentes}</Text>
-              <Text style={s.statLabel}>Pendentes</Text>
-            </View>
-            <View style={s.statCard}>
-              <Text style={s.statNumber}>{stats.confirmados}</Text>
-              <Text style={s.statLabel}>Confirmados</Text>
-            </View>
-            <View style={s.statCard}>
-              <Text style={s.statNumber}>{stats.total}</Text>
-              <Text style={s.statLabel}>Total</Text>
-            </View>
-          </View>
+      {/* Stats */}
+      <View style={s.stats}>
+        <View style={s.statCard}>
+          <Text style={s.statNumber}>{stats.pendentes}</Text>
+          <Text style={s.statLabel}>Pendentes</Text>
+        </View>
+        <View style={s.statCard}>
+          <Text style={s.statNumber}>{stats.confirmados}</Text>
+          <Text style={s.statLabel}>Confirmados</Text>
+        </View>
+        <View style={s.statCard}>
+          <Text style={s.statNumber}>{stats.total}</Text>
+          <Text style={s.statLabel}>Total</Text>
+        </View>
+      </View>
 
-          <FlatList
-            data={agendamentos}
-            keyExtractor={(item) => item.id}
-            renderItem={renderAgendamento}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={theme.colors.primary}
-              />
-            }
-            ListEmptyComponent={
-              <View style={s.emptyContainer}>
-                <Text style={s.emptyText}>Nenhum agendamento encontrado</Text>
-                <Text style={s.emptySubtext}>
-                  Os agendamentos aparecerão aqui quando os clientes solicitarem
-                </Text>
-              </View>
-            }
-            contentContainerStyle={agendamentos.length === 0 && s.emptyList}
+      <FlatList
+        data={agendamentos}
+        keyExtractor={(item) => item.id}
+        renderItem={renderAgendamento}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
           />
-        </>
-      )}
+        }
+        ListEmptyComponent={
+          <View style={s.empty}>
+            <Text style={s.emptyIcon}>📋</Text>
+            <Text style={s.emptyTitle}>Nenhum agendamento</Text>
+            <Text style={s.emptyDesc}>
+              Os agendamentos dos clientes aparecerão aqui.{'\n'}
+              Configure seus serviços na aba Configurações.
+            </Text>
+          </View>
+        }
+        contentContainerStyle={agendamentos.length === 0 && s.emptyContainer}
+      />
     </SafeAreaView>
   );
 }
 
 const getStyles = (theme: Theme) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.colors.background,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: theme.colors.textSecondary,
-  },
+  container: { flex: 1, backgroundColor: theme.colors.background },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
     backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  greeting: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-  },
-  headerButtons: {
+  greeting: { fontSize: 13, color: theme.colors.textSecondary },
+  title: { fontSize: 22, fontWeight: '800', color: theme.colors.text },
+  stats: {
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  perfilButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.surfaceVariant,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  perfilButtonText: {
-    fontSize: 20,
-  },
-  iconHeaderButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.surfaceVariant,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconHeaderButtonText: {
-    fontSize: 20,
-  },
-  analyticsButton: {
-    backgroundColor: '#8e44ad',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  analyticsButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  profileButton: {
-    backgroundColor: theme.colors.error,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  profileButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
   },
   statCard: {
     flex: 1,
     backgroundColor: theme.colors.surface,
-    padding: 16,
+    padding: 14,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: theme.colors.primary,
-  },
-  statLabel: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginTop: 4,
-  },
-  agendamentoCard: {
+  statNumber: { fontSize: 24, fontWeight: '800', color: theme.colors.primary },
+  statLabel: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
+  card: {
     backgroundColor: theme.colors.surface,
     marginHorizontal: 16,
-    marginVertical: 8,
+    marginVertical: 6,
     padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    elevation: 2,
   },
-  agendamentoHeader: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  clienteInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  avatarContainer: {
+  clienteInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -648,145 +356,47 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  avatarText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  clienteDetails: {
-    flex: 1,
-  },
-  clienteNome: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-  },
-  clienteEmail: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-  },
+  avatarText: { color: '#000', fontSize: 16, fontWeight: '800' },
+  clienteDetails: { flex: 1 },
+  clienteNome: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
+  clienteEmail: { fontSize: 13, color: theme.colors.textSecondary },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 10,
   },
-  statusText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  agendamentoInfo: {
-    marginBottom: 12,
-  },
-  agendamentoData: {
-    fontSize: 15,
-    color: theme.colors.text,
-    marginBottom: 4,
-  },
-  agendamentoServico: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    marginBottom: 4,
-  },
-  agendamentoCreated: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  confirmarButton: {
-    backgroundColor: theme.colors.success,
-  },
-  cancelarButton: {
-    backgroundColor: theme.colors.error,
-  },
-  concluirButton: {
-    backgroundColor: '#8e44ad',
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyList: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    color: theme.colors.textSecondary,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
-  // Settings panel
-  settingsContainer: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  settingsTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 16,
-  },
-  settingsItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  settingsItemIcon: {
-    fontSize: 24,
-    marginRight: 14,
-  },
-  settingsItemText: {
-    flex: 1,
-  },
-  settingsItemLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 2,
-  },
-  settingsItemDesc: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-  },
-  settingsChevron: {
-    fontSize: 22,
-    color: theme.colors.textMuted,
-  },
-  // Histórico do cliente
-  verHistoricoText: {
+  statusText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  cardBody: { marginBottom: 12 },
+  infoData: { fontSize: 15, color: theme.colors.text, marginBottom: 3 },
+  infoServico: { fontSize: 14, color: theme.colors.textSecondary, marginBottom: 3 },
+  infoCreated: { fontSize: 12, color: theme.colors.textMuted },
+  verHistorico: {
     fontSize: 13,
     color: theme.colors.primary,
     fontWeight: '600',
     marginTop: 6,
+  },
+  actions: { flexDirection: 'row', gap: 10 },
+  btn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  btnConfirmar: { backgroundColor: theme.colors.success },
+  btnCancelar: { backgroundColor: theme.colors.error },
+  btnConcluir: { backgroundColor: '#8e44ad' },
+  btnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  empty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 32 },
+  emptyContainer: { flexGrow: 1, justifyContent: 'center' },
+  emptyIcon: { fontSize: 48, marginBottom: 16 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text, marginBottom: 8 },
+  emptyDesc: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 21,
   },
 });
