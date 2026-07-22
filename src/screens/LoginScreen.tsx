@@ -84,18 +84,20 @@ export default function LoginScreen({ navigation }: Props) {
   const btnScale      = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    // Usar timing (duração fixa) ao invés de spring para evitar que
+    // o card ainda esteja se movendo quando o usuário toca nos inputs.
     Animated.parallel([
       Animated.timing(heroOpacity, {
-        toValue: 1, duration: 600, useNativeDriver: true,
+        toValue: 1, duration: 400, useNativeDriver: true,
       }),
-      Animated.spring(heroTranslateY, {
-        toValue: 0, tension: 80, friction: 10, useNativeDriver: true,
+      Animated.timing(heroTranslateY, {
+        toValue: 0, duration: 350, useNativeDriver: true,
       }),
       Animated.timing(cardOpacity, {
-        toValue: 1, duration: 600, delay: 250, useNativeDriver: true,
+        toValue: 1, duration: 400, delay: 150, useNativeDriver: true,
       }),
-      Animated.spring(cardTranslateY, {
-        toValue: 0, tension: 70, friction: 10, delay: 250, useNativeDriver: true,
+      Animated.timing(cardTranslateY, {
+        toValue: 0, duration: 350, delay: 150, useNativeDriver: true,
       }),
     ]).start();
   }, []);
@@ -200,9 +202,11 @@ export default function LoginScreen({ navigation }: Props) {
       <View style={s.circleBottomLeft} pointerEvents="none" />
       <View style={s.circleCenter}    pointerEvents="none" />
 
+      {/* No Android, o AndroidManifest já tem adjustResize — não usar behavior
+          para evitar duplo ajuste que descarta o foco do input */}
       <KeyboardAvoidingView
         style={s.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           contentContainerStyle={s.scroll}
