@@ -77,7 +77,7 @@ export default function BarbeiroPerfilTab({ navigation }: Props) {
         <View style={s.group}>
           <TouchableOpacity
             style={s.item}
-            onPress={() => navigation.navigate('Perfil')}
+            onPress={() => navigation.getParent()?.navigate('Perfil')}
             accessibilityRole="button"
           >
             <Text style={s.itemIcon}>✏️</Text>
