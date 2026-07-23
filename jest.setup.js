@@ -5,6 +5,27 @@ import '@testing-library/jest-native/extend-expect';
 // Cada teste mocka apenas o que precisa (Alert, Linking etc.).
 jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(jest.fn());
 
+// Animated.timing/spring usam setTimeout REAIS por baixo — inclusive o
+// `delay` de animações de entrada (ex.: LoginScreen). Esses timers não são
+// cancelados quando o teste termina, e como o processo Jest às vezes roda
+// vários arquivos de teste no mesmo processo Node (--runInBand ou poucos
+// arquivos), um timer real agendado por um arquivo pode disparar durante a
+// execução de outro arquivo — e travar/derrubar a suíte inteira quando cai
+// em código de animação nativa (findNodeHandle) fora do ambiente de teste
+// que o agendou. Torna as animações síncronas nos testes para eliminar
+// esses timers "órfãos" de vez.
+const RNAnimated = require('react-native').Animated;
+const instantAnimation = (value, config) => ({
+  start: (callback) => {
+    if (typeof config?.toValue === 'number') value.setValue(config.toValue);
+    callback && callback({ finished: true });
+  },
+  stop: () => {},
+  reset: () => {},
+});
+jest.spyOn(RNAnimated, 'timing').mockImplementation(instantAnimation);
+jest.spyOn(RNAnimated, 'spring').mockImplementation(instantAnimation);
+
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(() => Promise.resolve(null)),

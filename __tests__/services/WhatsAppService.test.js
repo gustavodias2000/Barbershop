@@ -15,6 +15,11 @@ jest.mock('react-native', () => ({
 // Mock fetch
 global.fetch = jest.fn();
 
+// WhatsAppService.sendTextMessage tenta primeiro a Cloud Function
+// `sendWhatsApp` (token no servidor) — o jest.setup.js global já mocka
+// `firebase/functions` pra sempre rejeitar, exercitando o fallback local
+// (Linking) testado abaixo. Ver comentário em jest.setup.js.
+
 describe('WhatsAppService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -61,8 +66,9 @@ describe('WhatsAppService', () => {
   });
 
   describe('sendTextMessage', () => {
-    it('should use fallback when API is not configured', async () => {
-      Linking.canOpenURL.mockResolvedValue(true);
+    it('should use fallback when Cloud Function is not available', async () => {
+      // A Cloud Function está mockada pra rejeitar (jest.setup.js), então
+      // cai direto no fallback: abrir o WhatsApp via Linking.openURL.
       Linking.openURL.mockResolvedValue(true);
 
       const result = await WhatsAppService.sendTextMessage(
@@ -71,12 +77,15 @@ describe('WhatsAppService', () => {
       );
 
       expect(result).toBe(true);
-      expect(Linking.canOpenURL).toHaveBeenCalled();
-      expect(Linking.openURL).toHaveBeenCalled();
+      expect(Linking.openURL).toHaveBeenCalledWith(
+        expect.stringContaining('whatsapp://send?phone=5511999999999')
+      );
     });
 
     it('should show alert when WhatsApp is not installed', async () => {
-      Linking.canOpenURL.mockResolvedValue(false);
+      // Falha tanto o link direto (whatsapp://) quanto o fallback web
+      // (wa.me) — só aí o serviço desiste e mostra o alerta.
+      Linking.openURL.mockRejectedValue(new Error('não instalado'));
 
       const result = await WhatsAppService.sendTextMessage(
         '11999999999',
@@ -86,7 +95,7 @@ describe('WhatsAppService', () => {
       expect(result).toBe(false);
       expect(Alert.alert).toHaveBeenCalledWith(
         'WhatsApp não encontrado',
-        'Por favor, instale o WhatsApp para enviar mensagens.'
+        'Não foi possível abrir o WhatsApp. Verifique se ele está instalado.'
       );
     });
   });
