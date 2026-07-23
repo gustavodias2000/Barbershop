@@ -177,6 +177,10 @@ export default function ClientesScreen({ navigation }: Props) {
           {
             text: 'Importar',
             onPress: async () => {
+              // O Alert nativo não fica "preso" ao fluxo async anterior — sem
+              // isso, o app fica sem nenhum indicador visual enquanto salva
+              // (o spinner da fase de leitura já tinha sido desligado).
+              setImportando(true);
               try {
                 const uid = auth.currentUser?.uid;
                 if (!uid) return;
@@ -186,6 +190,8 @@ export default function ClientesScreen({ navigation }: Props) {
               } catch (error) {
                 console.error('Erro ao importar contatos:', error);
                 Alert.alert('Erro', 'Não foi possível concluir a importação. Tente novamente.');
+              } finally {
+                setImportando(false);
               }
             },
           },

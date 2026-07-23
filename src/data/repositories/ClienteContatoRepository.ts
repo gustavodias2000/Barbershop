@@ -53,9 +53,11 @@ export async function adicionarClienteManual(
 
 /**
  * Importa vários contatos de uma vez (ex.: da agenda do telefone).
- * Usa um batch write para evitar N round-trips ao Firestore.
- * Limite de 400 por chamada (margem de segurança sobre o limite de 500
- * operações por batch do Firestore).
+ * Usa batch writes para evitar N round-trips ao Firestore — mas o
+ * Firestore só aceita até 500 operações por batch, então listas maiores
+ * são divididas em lotes de 400 (margem de segurança) e commitadas em
+ * sequência. Antes disso, tudo além do primeiro lote era descartado
+ * silenciosamente; agora nenhum contato fica de fora.
  */
 export async function importarClientesEmLote(
   barbeiroId: string,
@@ -63,21 +65,28 @@ export async function importarClientesEmLote(
 ): Promise<number> {
   if (contatos.length === 0) return 0;
 
-  const lote = contatos.slice(0, 400);
-  const batch = writeBatch(db);
+  const TAMANHO_LOTE = 400;
+  let importados = 0;
 
-  for (const contato of lote) {
-    const novoDoc = doc(clientesRef(barbeiroId));
-    batch.set(novoDoc, {
-      nome: contato.nome,
-      telefone: contato.telefone || null,
-      origem: 'contatos',
-      createdAt: serverTimestamp(),
-    });
+  for (let i = 0; i < contatos.length; i += TAMANHO_LOTE) {
+    const lote = contatos.slice(i, i + TAMANHO_LOTE);
+    const batch = writeBatch(db);
+
+    for (const contato of lote) {
+      const novoDoc = doc(clientesRef(barbeiroId));
+      batch.set(novoDoc, {
+        nome: contato.nome,
+        telefone: contato.telefone || null,
+        origem: 'contatos',
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
+    importados += lote.length;
   }
 
-  await batch.commit();
-  return lote.length;
+  return importados;
 }
 
 /**
