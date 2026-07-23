@@ -77,6 +77,8 @@ export interface ClienteContato {
   id: string;
   nome: string;
   telefone?: string;
+  /** Formato "MM-DD" (mês 1-indexado), sem ano — ex.: "07-23" para 23/07. */
+  aniversario?: string;
   origem: 'manual' | 'contatos';
   createdAt?: FirestoreDate;
 }
@@ -306,6 +308,8 @@ export type RootStackParamList = {
   ConfigServicos: { profissionalId?: string; profissionalNome?: string } | undefined;
   SetupBarbeiro: undefined;
   Clientes: undefined;
+  Aniversariantes: undefined;
+  Promocao: undefined;
   Equipe: undefined;
   EditarProfissional: { profissionalId?: string } | undefined;
   Comissoes: undefined;

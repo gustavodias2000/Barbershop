@@ -27,10 +27,18 @@ import { auth } from '../../firebaseConfig';
 import {
   listarClientesDoBarbeiro,
   adicionarClienteManual,
+  atualizarCliente,
   importarClientesEmLote,
   removerCliente,
 } from '../data/repositories/ClienteContatoRepository';
-import { maskPhone, formatPhoneToE164 } from '../utils/dateUtils';
+import {
+  maskPhone,
+  formatPhoneToE164,
+  maskDiaMes,
+  diaMesParaAniversario,
+  aniversarioParaExibicao,
+  birthdayParaAniversario,
+} from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, ClienteContato } from '../types';
@@ -42,6 +50,7 @@ interface ContatoDoTelefone {
   givenName?: string;
   familyName?: string;
   phoneNumbers: Array<{ number: string }>;
+  birthday?: { day?: number; month?: number; year?: number };
 }
 
 export default function ClientesScreen({ navigation }: Props) {
@@ -55,6 +64,9 @@ export default function ClientesScreen({ navigation }: Props) {
   const [salvandoManual, setSalvandoManual] = useState(false);
   const [nomeManual, setNomeManual] = useState('');
   const [telefoneManual, setTelefoneManual] = useState('');
+  const [aniversarioManual, setAniversarioManual] = useState('');
+  /** null = cadastrando um novo cliente; preenchido = editando este cliente. */
+  const [clienteEditando, setClienteEditando] = useState<ClienteContato | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -75,8 +87,18 @@ export default function ClientesScreen({ navigation }: Props) {
   };
 
   const abrirModalManual = () => {
+    setClienteEditando(null);
     setNomeManual('');
     setTelefoneManual('');
+    setAniversarioManual('');
+    setModalVisible(true);
+  };
+
+  const abrirModalEdicao = (cliente: ClienteContato) => {
+    setClienteEditando(cliente);
+    setNomeManual(cliente.nome);
+    setTelefoneManual(cliente.telefone ? maskPhone(cliente.telefone.replace(/^55/, '')) : '');
+    setAniversarioManual(cliente.aniversario ? aniversarioParaExibicao(cliente.aniversario) : '');
     setModalVisible(true);
   };
 
@@ -85,18 +107,28 @@ export default function ClientesScreen({ navigation }: Props) {
       Alert.alert('Atenção', 'Informe o nome do cliente.');
       return;
     }
+    if (aniversarioManual && aniversarioManual.replace(/\D/g, '').length === 4 && !diaMesParaAniversario(aniversarioManual)) {
+      Alert.alert('Atenção', 'Data de aniversário inválida.');
+      return;
+    }
     setSalvandoManual(true);
     try {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
-      await adicionarClienteManual(uid, {
+      const dados = {
         nome: nomeManual.trim(),
         telefone: telefoneManual ? formatPhoneToE164(telefoneManual) : undefined,
-      });
+        aniversario: diaMesParaAniversario(aniversarioManual),
+      };
+      if (clienteEditando) {
+        await atualizarCliente(uid, clienteEditando.id, dados);
+      } else {
+        await adicionarClienteManual(uid, dados);
+      }
       setModalVisible(false);
       fetchClientes();
     } catch (error) {
-      console.error('Erro ao adicionar cliente:', error);
+      console.error('Erro ao salvar cliente:', error);
       Alert.alert('Erro', 'Não foi possível salvar. Tente novamente.');
     } finally {
       setSalvandoManual(false);
@@ -160,7 +192,8 @@ export default function ClientesScreen({ navigation }: Props) {
         .map((c) => {
           const nome = `${c.givenName || ''} ${c.familyName || ''}`.trim() || 'Sem nome';
           const telefone = formatPhoneToE164(c.phoneNumbers[0].number);
-          return { nome, telefone };
+          const aniversario = birthdayParaAniversario(c.birthday);
+          return { nome, telefone, aniversario };
         })
         .filter((c) => c.telefone && !telefonesJaCadastrados.has(c.telefone));
 
@@ -261,29 +294,46 @@ export default function ClientesScreen({ navigation }: Props) {
               <Text style={s.subtitle}>
                 {clientes.length} cliente{clientes.length !== 1 ? 's' : ''} na sua agenda
               </Text>
-              <TouchableOpacity
-                onPress={handleImportarContatos}
-                disabled={importando}
-                accessibilityRole="button"
-                accessibilityLabel="Importar mais contatos"
-              >
-                {importando ? (
-                  <ActivityIndicator color={theme.colors.primary} />
-                ) : (
-                  <Text style={s.importarLink}>📇 Importar</Text>
-                )}
-              </TouchableOpacity>
+              <View style={s.headerActions}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Aniversariantes')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver aniversariantes"
+                >
+                  <Text style={s.importarLink}>🎂 Aniversários</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleImportarContatos}
+                  disabled={importando}
+                  accessibilityRole="button"
+                  accessibilityLabel="Importar mais contatos"
+                >
+                  {importando ? (
+                    <ActivityIndicator color={theme.colors.primary} />
+                  ) : (
+                    <Text style={s.importarLink}>📇 Importar</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           ) : null
         }
         renderItem={({ item }) => (
-          <View style={s.card}>
+          <TouchableOpacity
+            style={s.card}
+            onPress={() => abrirModalEdicao(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`Editar ${item.nome}`}
+          >
             <View style={s.avatar}>
               <Text style={s.avatarText}>{item.nome.charAt(0).toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.clienteNome}>{item.nome}</Text>
               {item.telefone ? <Text style={s.clienteTelefone}>{item.telefone}</Text> : null}
+              {item.aniversario ? (
+                <Text style={s.clienteTelefone}>🎂 {aniversarioParaExibicao(item.aniversario)}</Text>
+              ) : null}
             </View>
             {item.origem === 'contatos' && (
               <View style={s.badge}>
@@ -297,7 +347,7 @@ export default function ClientesScreen({ navigation }: Props) {
             >
               <Text style={s.deleteButtonText}>🗑️</Text>
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         )}
       />
 
@@ -323,7 +373,7 @@ export default function ClientesScreen({ navigation }: Props) {
           style={s.modalOverlay}
         >
           <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Novo Cliente</Text>
+            <Text style={s.modalTitle}>{clienteEditando ? 'Editar Cliente' : 'Novo Cliente'}</Text>
 
             <Text style={s.label}>Nome</Text>
             <TextInput
@@ -344,6 +394,17 @@ export default function ClientesScreen({ navigation }: Props) {
               placeholderTextColor={theme.colors.textMuted}
               keyboardType="phone-pad"
               maxLength={15}
+            />
+
+            <Text style={s.label}>Aniversário (opcional)</Text>
+            <TextInput
+              value={aniversarioManual}
+              onChangeText={(t) => setAniversarioManual(maskDiaMes(t))}
+              style={s.input}
+              placeholder="DD/MM"
+              placeholderTextColor={theme.colors.textMuted}
+              keyboardType="number-pad"
+              maxLength={5}
             />
 
             <View style={s.modalActions}>
@@ -379,6 +440,11 @@ const getStyles = (theme: Theme) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: 12,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
     },
     subtitle: {
       fontSize: 13,

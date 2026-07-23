@@ -90,6 +90,20 @@ const GRUPOS: ItemConfig[][] = [
       cor: '#2F80ED',
     },
     {
+      icon: '🎂',
+      label: 'Aniversariantes',
+      desc: 'Veja os próximos aniversários e mande parabéns',
+      route: 'Aniversariantes',
+      cor: '#FF8FA3',
+    },
+    {
+      icon: '📣',
+      label: 'Promoção via WhatsApp',
+      desc: 'Envie uma mensagem promocional para sua carteira de clientes',
+      route: 'Promocao',
+      cor: '#25D366',
+    },
+    {
       icon: '⏳',
       label: 'Lista de Espera',
       desc: 'Veja clientes aguardando horário disponível',

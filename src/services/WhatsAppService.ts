@@ -187,6 +187,29 @@ Te esperamos! 💪`;
   }
 
   /**
+   * Gera mensagem de parabéns de aniversário (barbeiro → cliente).
+   */
+  gerarMensagemAniversario(cliente: PessoaInfo, barbeiroNome: string): string {
+    return `Feliz aniversário, ${cliente.nome}! 🎉🎂
+
+A equipe ${barbeiroNome} deseja a você um dia repleto de alegria!
+
+Como presente, que tal passar aqui para dar um trato no visual? Estamos te esperando! 💈`;
+  }
+
+  /**
+   * Gera mensagem promocional (barbeiro → cliente), a partir do texto livre
+   * digitado pelo barbeiro. Se {nome_cliente} estiver presente, é
+   * substituído; caso contrário a mensagem é enviada como está.
+   */
+  gerarMensagemPromocional(cliente: PessoaInfo, textoLivre: string): string {
+    if (textoLivre.includes('{nome_cliente}')) {
+      return textoLivre.replace(/{nome_cliente}/g, cliente.nome);
+    }
+    return textoLivre;
+  }
+
+  /**
    * Interpola variáveis em um template customizado do barbeiro.
    *
    * Variáveis suportadas:

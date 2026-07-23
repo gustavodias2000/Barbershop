@@ -17,6 +17,7 @@ import {
   doc,
   writeBatch,
   deleteDoc,
+  updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import type { ClienteContato } from '../../types';
@@ -40,15 +41,33 @@ export async function listarClientesDoBarbeiro(
  */
 export async function adicionarClienteManual(
   barbeiroId: string,
-  dados: { nome: string; telefone?: string },
+  dados: { nome: string; telefone?: string; aniversario?: string },
 ): Promise<string> {
   const docRef = await addDoc(clientesRef(barbeiroId), {
     nome: dados.nome,
     telefone: dados.telefone || null,
     origem: 'manual',
     createdAt: serverTimestamp(),
+    ...(dados.aniversario ? { aniversario: dados.aniversario } : {}),
   });
   return docRef.id;
+}
+
+/**
+ * Atualiza campos de um cliente já cadastrado (ex.: adicionar/corrigir o
+ * aniversário de um contato importado sem essa informação).
+ */
+export async function atualizarCliente(
+  barbeiroId: string,
+  clienteId: string,
+  dados: { nome?: string; telefone?: string; aniversario?: string },
+): Promise<void> {
+  const docRef = doc(db, 'barbeiros', barbeiroId, 'clientes', clienteId);
+  await updateDoc(docRef, {
+    ...(dados.nome !== undefined ? { nome: dados.nome } : {}),
+    ...(dados.telefone !== undefined ? { telefone: dados.telefone || null } : {}),
+    ...(dados.aniversario !== undefined ? { aniversario: dados.aniversario || null } : {}),
+  });
 }
 
 /**
@@ -61,7 +80,7 @@ export async function adicionarClienteManual(
  */
 export async function importarClientesEmLote(
   barbeiroId: string,
-  contatos: Array<{ nome: string; telefone?: string }>,
+  contatos: Array<{ nome: string; telefone?: string; aniversario?: string }>,
 ): Promise<number> {
   if (contatos.length === 0) return 0;
 
@@ -79,6 +98,7 @@ export async function importarClientesEmLote(
         telefone: contato.telefone || null,
         origem: 'contatos',
         createdAt: serverTimestamp(),
+        ...(contato.aniversario ? { aniversario: contato.aniversario } : {}),
       });
     }
 

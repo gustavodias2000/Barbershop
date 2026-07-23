@@ -21,6 +21,8 @@ import FolgasScreen from './src/screens/FolgasScreen';
 import ConfigServicosScreen from './src/screens/ConfigServicosScreen';
 import SetupBarbeiroScreen from './src/screens/SetupBarbeiroScreen';
 import ClientesScreen from './src/screens/ClientesScreen';
+import AniversariantesScreen from './src/screens/AniversariantesScreen';
+import PromocaoScreen from './src/screens/PromocaoScreen';
 import TemplatesMensagemScreen from './src/screens/TemplatesMensagemScreen';
 import ClientesBanidosScreen from './src/screens/ClientesBanidosScreen';
 import HistoricoClienteScreen from './src/screens/HistoricoClienteScreen';
@@ -133,6 +135,16 @@ export default function App() {
             name="Clientes"
             component={ClientesScreen}
             options={{ title: 'Clientes' }}
+          />
+          <Stack.Screen
+            name="Aniversariantes"
+            component={AniversariantesScreen}
+            options={{ title: 'Aniversariantes' }}
+          />
+          <Stack.Screen
+            name="Promocao"
+            component={PromocaoScreen}
+            options={{ title: 'Promoção' }}
           />
           <Stack.Screen
             name="Equipe"

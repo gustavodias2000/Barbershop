@@ -108,3 +108,68 @@ export const maskPhone = (value: string): string => {
   if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
+
+// ─── Aniversário (dia/mês, sem ano) ────────────────────────────────────────────
+// Armazenado como "MM-DD" (mês 1-indexado) — mesmo formato usado pelo
+// `Birthday` de `react-native-contacts`. Exibido ao usuário como "DD/MM".
+
+/**
+ * Máscara visual de entrada: DD/MM (ex.: "23/07").
+ */
+export const maskDiaMes = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+};
+
+/**
+ * Converte a entrada mascarada "DD/MM" para o formato de armazenamento
+ * "MM-DD". Retorna undefined se a data for inválida ou incompleta.
+ */
+export const diaMesParaAniversario = (value: string): string | undefined => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length !== 4) return undefined;
+  const dia = parseInt(digits.slice(0, 2), 10);
+  const mes = parseInt(digits.slice(2, 4), 10);
+  if (mes < 1 || mes > 12) return undefined;
+  const diasNoMes = new Date(2024, mes, 0).getDate(); // 2024 = ano bissexto (cobre 29/02)
+  if (dia < 1 || dia > diasNoMes) return undefined;
+  return `${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+};
+
+/**
+ * Converte "MM-DD" (armazenamento) para "DD/MM" (exibição).
+ */
+export const aniversarioParaExibicao = (aniversario: string): string => {
+  const [mes, dia] = aniversario.split('-');
+  return `${dia}/${mes}`;
+};
+
+/**
+ * Monta o valor "MM-DD" a partir do `Birthday` de `react-native-contacts`
+ * (`{ day, month }`, mês 1-indexado). Retorna undefined se ausente/inválido.
+ */
+export const birthdayParaAniversario = (
+  birthday?: { day?: number; month?: number } | null,
+): string | undefined => {
+  if (!birthday?.day || !birthday?.month) return undefined;
+  if (birthday.month < 1 || birthday.month > 12) return undefined;
+  return `${String(birthday.month).padStart(2, '0')}-${String(birthday.day).padStart(2, '0')}`;
+};
+
+/**
+ * Quantos dias faltam para o próximo aniversário (0 = hoje), a partir de
+ * "MM-DD". Usado para ordenar a lista de aniversariantes.
+ */
+export const diasAteProximoAniversario = (aniversario: string, hoje: Date = new Date()): number => {
+  const [mes, dia] = aniversario.split('-').map((n) => parseInt(n, 10));
+  const anoAtual = hoje.getFullYear();
+  const hojeSemHora = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+
+  let proxima = new Date(anoAtual, mes - 1, dia);
+  if (proxima < hojeSemHora) {
+    proxima = new Date(anoAtual + 1, mes - 1, dia);
+  }
+  const msPorDia = 1000 * 60 * 60 * 24;
+  return Math.round((proxima.getTime() - hojeSemHora.getTime()) / msPorDia);
+};
