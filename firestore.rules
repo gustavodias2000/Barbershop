@@ -71,9 +71,18 @@ service cloud.firestore {
 
     // ---- Negócios (equipe multi-profissional) ----
     match /negocios/{negocioId} {
-      allow read:   if isDonoDoNegocio(negocioId);
+      // A 2ª condição (resource.data.donoUid) é necessária para a QUERY
+      // getNegocioPorDono() (where donoUid == uid, sem conhecer o id do
+      // negócio de antemão): o Firestore só autoriza uma query de lista se
+      // a regra puder ser provada usando o próprio filtro da query. Como
+      // isDonoDoNegocio() depende de uma leitura em subcoleção (membros)
+      // sem relação direta com o campo filtrado (donoUid), o Firestore não
+      // consegue provar a regra e nega a query inteira — mesmo quando o
+      // usuário É o dono. A checagem direta em resource.data.donoUid
+      // resolve isso (mesmo padrão já usado abaixo em /membros).
+      allow read:   if isDonoDoNegocio(negocioId) || resource.data.donoUid == request.auth.uid;
       allow create: if isSignedIn() && isBarbeiro() && request.resource.data.donoUid == request.auth.uid;
-      allow update, delete: if isDonoDoNegocio(negocioId);
+      allow update, delete: if isDonoDoNegocio(negocioId) || resource.data.donoUid == request.auth.uid;
 
       // Papel e comissão de cada profissional — só o dono acessa.
       // A 2ª condição resolve o "ovo e a galinha" da criação do negócio: o
