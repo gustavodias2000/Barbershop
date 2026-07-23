@@ -166,6 +166,14 @@ export interface Barbeiro {
   mensagemPosAgendamento?: string;
   /** Endereço do estabelecimento (exibido na confirmação e usado no link do mapa) */
   endereco?: string;
+  /**
+   * Endereço formatado pelo Google Places (quando o barbeiro escolheu uma
+   * sugestão do autocomplete, em vez de digitar o endereço livremente).
+   */
+  enderecoFormatado?: string;
+  /** Coordenadas do endereço (Google Places), usadas para um pino preciso no mapa. */
+  latitude?: number;
+  longitude?: number;
   /** Datas em que o barbeiro não atende (formato YYYY-MM-DD) — folgas, férias, feriados */
   datasBloqueadas?: DataISO[];
   /**

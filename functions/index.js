@@ -16,6 +16,7 @@ admin.initializeApp();
 // Secrets configurados via `firebase functions:secrets:set` (ver GUIA no final)
 const WHATSAPP_TOKEN = defineSecret('WHATSAPP_TOKEN');
 const WHATSAPP_PHONE_ID = defineSecret('WHATSAPP_PHONE_ID');
+const GOOGLE_PLACES_API_KEY = defineSecret('GOOGLE_PLACES_API_KEY');
 
 const API_VERSION = 'v21.0';
 
@@ -85,6 +86,101 @@ exports.sendWhatsApp = onCall(
       throw new HttpsError('internal', 'Falha ao enviar mensagem no WhatsApp.');
     }
     return { success: true, id: result.id };
+  },
+);
+
+/**
+ * placesAutocomplete / placesDetails — proxy da Google Places API.
+ *
+ * Mesma lógica de segurança do `sendWhatsApp`: a chave da API do Google
+ * fica só no servidor (secret), o app nunca a carrega. Sem isso, qualquer
+ * pessoa poderia extrair a chave do APK e usar a cota (e o cartão) do
+ * Gustavo. Requer a "Places API" (legada) habilitada no Google Cloud
+ * Console do mesmo projeto do Firebase.
+ */
+exports.placesAutocomplete = onCall(
+  { secrets: [GOOGLE_PLACES_API_KEY], region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'É necessário estar logado.');
+    }
+    const input = String(request.data?.input || '').trim();
+    if (input.length < 3) {
+      return { predictions: [] };
+    }
+
+    const apiKey = GOOGLE_PLACES_API_KEY.value();
+    if (!apiKey) {
+      throw new HttpsError('failed-precondition', 'Geocoding não configurado no servidor.');
+    }
+
+    const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
+    url.searchParams.set('input', input);
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('language', 'pt-BR');
+    url.searchParams.set('components', 'country:br');
+    url.searchParams.set('types', 'address');
+
+    try {
+      const resp = await fetch(url.toString());
+      const data = await resp.json();
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+        logger.error('Erro da Places Autocomplete API', data.status, data.error_message);
+        throw new HttpsError('internal', 'Falha ao buscar endereços.');
+      }
+      const predictions = (data.predictions || []).map((p) => ({
+        placeId: p.place_id,
+        description: p.description,
+      }));
+      return { predictions };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error('Erro ao chamar Places Autocomplete', error);
+      throw new HttpsError('internal', 'Falha ao buscar endereços.');
+    }
+  },
+);
+
+exports.placesDetails = onCall(
+  { secrets: [GOOGLE_PLACES_API_KEY], region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'É necessário estar logado.');
+    }
+    const placeId = String(request.data?.placeId || '').trim();
+    if (!placeId) {
+      throw new HttpsError('invalid-argument', 'Campo "placeId" é obrigatório.');
+    }
+
+    const apiKey = GOOGLE_PLACES_API_KEY.value();
+    if (!apiKey) {
+      throw new HttpsError('failed-precondition', 'Geocoding não configurado no servidor.');
+    }
+
+    const url = new URL('https://maps.googleapis.com/maps/api/place/details/json');
+    url.searchParams.set('place_id', placeId);
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('language', 'pt-BR');
+    url.searchParams.set('fields', 'formatted_address,geometry');
+
+    try {
+      const resp = await fetch(url.toString());
+      const data = await resp.json();
+      if (data.status !== 'OK') {
+        logger.error('Erro da Places Details API', data.status, data.error_message);
+        throw new HttpsError('internal', 'Falha ao obter detalhes do endereço.');
+      }
+      const result = data.result || {};
+      return {
+        formattedAddress: result.formatted_address || null,
+        latitude: result.geometry?.location?.lat ?? null,
+        longitude: result.geometry?.location?.lng ?? null,
+      };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error('Erro ao chamar Places Details', error);
+      throw new HttpsError('internal', 'Falha ao obter detalhes do endereço.');
+    }
   },
 );
 

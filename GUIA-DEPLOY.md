@@ -136,6 +136,41 @@ https://github.com/gustavodias2000/Barbershop/security/dependabot
 
 ---
 
+## 9. Configurar o secret do Google Places (geocoding de endereço, opcional)
+
+Habilita o autocomplete de endereço com pino no mapa na tela de Perfil do
+barbeiro (item competitivo do Gendo). **Totalmente opcional** — sem isso,
+o campo de endereço continua funcionando como texto livre, exatamente
+como antes.
+
+1. No [Google Cloud Console](https://console.cloud.google.com/), selecione
+   o mesmo projeto do Firebase (**barbershop-a754d**).
+2. Ative a **Places API** (legada): menu **APIs e Serviços** → **Biblioteca**
+   → busque "Places API" → **Ativar**. Isso pode exigir vincular uma conta
+   de faturamento do Google Cloud (separada do plano Blaze do Firebase) —
+   o Google dá uma cota gratuita mensal generosa para geocoding.
+3. Crie uma chave de API: **APIs e Serviços** → **Credenciais** → **Criar
+   credenciais** → **Chave de API**. Restrinja a chave à **Places API**
+   (aba "Restrições de API") para reduzir o risco em caso de vazamento.
+4. Configure o secret na Cloud Function:
+
+```powershell
+firebase functions:secrets:set GOOGLE_PLACES_API_KEY
+# cole a chave quando pedir
+```
+
+5. Publique as functions novamente (já inclui as duas novas):
+
+```powershell
+firebase deploy --only functions
+```
+
+Publica também:
+- **`placesAutocomplete`** — sugestões de endereço enquanto o barbeiro digita
+- **`placesDetails`** — resolve a sugestão escolhida em endereço formatado + coordenadas
+
+---
+
 ## Resumo do essencial
 
 | Passo | Comando | Precisa de Blaze? |
@@ -145,3 +180,4 @@ https://github.com/gustavodias2000/Barbershop/security/dependabot
 | Regras + índices | `firebase deploy --only firestore:rules,firestore:indexes` | **Não** |
 | Secrets WhatsApp | `firebase functions:secrets:set ...` | Sim |
 | Functions | `firebase deploy --only functions` | Sim |
+| Secret Google Places (opcional) | `firebase functions:secrets:set GOOGLE_PLACES_API_KEY` | Sim (+ faturamento Google Cloud) |

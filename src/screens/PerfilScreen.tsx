@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,11 @@ import {
   deleteProfile,
 } from '../data/repositories/UsuarioRepository';
 import { upsertBarbeiro, removerBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroRepository';
+import {
+  buscarSugestoesEndereco,
+  buscarDetalhesEndereco,
+  type SugestaoEndereco,
+} from '../services/GeocodingService';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import ThemeSelector from '../components/ThemeSelector';
 import { maskPhone, formatPhoneToE164 } from '../utils/dateUtils';
@@ -47,6 +52,15 @@ export default function PerfilScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+
+  // Autocomplete de endereço (Google Places, via Cloud Function — item de
+  // geocoding do plano competitivo). lat/lng só ficam preenchidos quando o
+  // usuário escolhe uma sugestão da lista; digitar livremente continua
+  // funcionando como antes (sem coordenadas).
+  const [sugestoesEndereco, setSugestoesEndereco] = useState<SugestaoEndereco[]>([]);
+  const [buscandoEndereco, setBuscandoEndereco] = useState(false);
+  const [coordenadas, setCoordenadas] = useState<{ lat: number; lng: number } | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Para troca de senha
   const [senhaAtual, setSenhaAtual] = useState('');
@@ -83,7 +97,10 @@ export default function PerfilScreen({ navigation }: Props) {
         // Endereço só existe na vitrine do barbeiro (coleção `barbeiros`)
         if (data.tipo === 'barbeiro') {
           const barbeiroDoc = await getBarbeiro(uid);
-          setEndereco(barbeiroDoc?.endereco || '');
+          setEndereco(barbeiroDoc?.enderecoFormatado || barbeiroDoc?.endereco || '');
+          if (barbeiroDoc?.latitude != null && barbeiroDoc?.longitude != null) {
+            setCoordenadas({ lat: barbeiroDoc.latitude, lng: barbeiroDoc.longitude });
+          }
         }
       }
     } catch (error) {
@@ -127,7 +144,10 @@ export default function PerfilScreen({ navigation }: Props) {
         await upsertBarbeiro(uid, {
           nome: nome.trim(),
           telefone: telefoneE164,
-          endereco: endereco.trim() || undefined,
+          ...(endereco.trim() ? { endereco: endereco.trim() } : {}),
+          // Coordenadas só existem quando o endereço veio de uma sugestão do
+          // autocomplete — texto digitado livremente não tem lat/lng.
+          ...(coordenadas ? { latitude: coordenadas.lat, longitude: coordenadas.lng } : {}),
         });
       }
 
@@ -137,6 +157,45 @@ export default function PerfilScreen({ navigation }: Props) {
       Alert.alert('Erro', 'Não foi possível salvar as alterações.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangeEndereco = (texto: string) => {
+    setEndereco(texto);
+    // Qualquer edição manual invalida a sugestão escolhida antes — só volta
+    // a ter coordenadas se o usuário escolher uma sugestão nova.
+    setCoordenadas(null);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (texto.trim().length < 3) {
+      setSugestoesEndereco([]);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setBuscandoEndereco(true);
+      try {
+        const sugestoes = await buscarSugestoesEndereco(texto);
+        setSugestoesEndereco(sugestoes);
+      } finally {
+        setBuscandoEndereco(false);
+      }
+    }, 400);
+  };
+
+  const handleSelecionarSugestao = async (sugestao: SugestaoEndereco) => {
+    setSugestoesEndereco([]);
+    setEndereco(sugestao.description);
+    setBuscandoEndereco(true);
+    try {
+      const detalhes = await buscarDetalhesEndereco(sugestao.placeId);
+      if (detalhes?.formattedAddress) {
+        setEndereco(detalhes.formattedAddress);
+      }
+      if (detalhes?.latitude != null && detalhes?.longitude != null) {
+        setCoordenadas({ lat: detalhes.latitude, lng: detalhes.longitude });
+      }
+    } finally {
+      setBuscandoEndereco(false);
     }
   };
 
@@ -383,23 +442,50 @@ export default function PerfilScreen({ navigation }: Props) {
           </View>
 
           {userData?.tipo === 'barbeiro' && (
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, { zIndex: 10 }]}>
               <Text style={[styles.label, { color: theme.colors.text }]}>
                 Endereço do estabelecimento
               </Text>
-              <TextInput
-                value={endereco}
-                onChangeText={setEndereco}
-                style={[
-                  styles.input,
-                  { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border },
-                ]}
-                placeholder="Rua, número, bairro, cidade"
-                placeholderTextColor={theme.colors.textSecondary}
-                autoCapitalize="sentences"
-              />
+              <View>
+                <TextInput
+                  value={endereco}
+                  onChangeText={handleChangeEndereco}
+                  style={[
+                    styles.input,
+                    { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border },
+                  ]}
+                  placeholder="Comece a digitar e escolha uma sugestão"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  autoCapitalize="sentences"
+                />
+                {buscandoEndereco && (
+                  <ActivityIndicator
+                    size="small"
+                    color={theme.colors.primary}
+                    style={styles.enderecoSpinner}
+                  />
+                )}
+                {sugestoesEndereco.length > 0 && (
+                  <View style={[styles.sugestoesBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                    {sugestoesEndereco.map((s) => (
+                      <TouchableOpacity
+                        key={s.placeId}
+                        style={styles.sugestaoItem}
+                        onPress={() => handleSelecionarSugestao(s)}
+                        accessibilityRole="button"
+                      >
+                        <Text style={[styles.sugestaoText, { color: theme.colors.text }]} numberOfLines={2}>
+                          📍 {s.description}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
               <Text style={[styles.hintSmall, { color: theme.colors.textSecondary }]}>
-                Exibido aos clientes na confirmação do agendamento, com link para o mapa.
+                {coordenadas
+                  ? '✓ Endereço confirmado com localização no mapa.'
+                  : 'Exibido aos clientes na confirmação do agendamento, com link para o mapa.'}
               </Text>
             </View>
           )}
@@ -662,6 +748,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     lineHeight: 16,
+  },
+  enderecoSpinner: {
+    position: 'absolute',
+    right: 12,
+    top: 14,
+  },
+  sugestoesBox: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: -12,
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  sugestaoItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#00000022',
+  },
+  sugestaoText: {
+    fontSize: 14,
+    lineHeight: 19,
   },
   saveButton: {
     backgroundColor: '#3498db',

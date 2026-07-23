@@ -49,9 +49,16 @@ export default function AgendamentoConfirmadoScreen({ route, navigation }: Props
   };
 
   const handleAbrirMapa = () => {
-    const endereco = barbeiro.endereco;
-    if (!endereco) return;
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`;
+    // Prefere as coordenadas (geocoding via Google Places) quando existirem
+    // — pino exato no mapa. Sem elas, cai para a busca por texto de sempre.
+    const temCoordenadas = barbeiro.latitude != null && barbeiro.longitude != null;
+    const endereco = barbeiro.enderecoFormatado || barbeiro.endereco;
+    if (!temCoordenadas && !endereco) return;
+
+    const url = temCoordenadas
+      ? `https://www.google.com/maps/search/?api=1&query=${barbeiro.latitude},${barbeiro.longitude}`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco!)}`;
+
     Linking.openURL(url).catch(() => {
       Alert.alert('Erro', 'Não foi possível abrir o mapa.');
     });
@@ -156,7 +163,7 @@ export default function AgendamentoConfirmadoScreen({ route, navigation }: Props
                 <Text style={s.chevron}>›</Text>
               </TouchableOpacity>
 
-              {barbeiro.endereco ? (
+              {barbeiro.enderecoFormatado || barbeiro.endereco ? (
                 <TouchableOpacity
                   style={s.actionRow}
                   onPress={handleAbrirMapa}
@@ -166,7 +173,9 @@ export default function AgendamentoConfirmadoScreen({ route, navigation }: Props
                   <Text style={s.actionIcon}>📍</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={s.actionText}>Ver no mapa</Text>
-                    <Text style={s.actionSubtext} numberOfLines={1}>{barbeiro.endereco}</Text>
+                    <Text style={s.actionSubtext} numberOfLines={1}>
+                      {barbeiro.enderecoFormatado || barbeiro.endereco}
+                    </Text>
                   </View>
                   <Text style={s.chevron}>›</Text>
                 </TouchableOpacity>
