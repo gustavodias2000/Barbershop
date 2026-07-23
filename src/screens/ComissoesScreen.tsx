@@ -51,7 +51,7 @@ function inicioDoPeriodo(periodo: Periodo): Date {
   return d;
 }
 
-export default function ComissoesScreen({ navigation }: Props) {
+export default function ComissoesScreen({ navigation: _navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
   const uid = auth.currentUser?.uid;

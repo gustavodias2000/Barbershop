@@ -62,18 +62,6 @@ export async function toggleRecorrencia(
 }
 
 /**
- * Atualiza a data do último agendamento gerado.
- */
-export async function atualizarUltimoAgendamento(
-  recorrenciaId: string,
-  data: string,
-): Promise<void> {
-  await updateDoc(doc(db, 'recorrencias', recorrenciaId), {
-    ultimoAgendamento: data,
-  });
-}
-
-/**
  * Remove uma recorrência.
  */
 export async function removerRecorrencia(recorrenciaId: string): Promise<void> {

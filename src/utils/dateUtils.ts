@@ -11,13 +11,6 @@ interface ComPreco {
   preco?: string;
 }
 
-export interface DiaDisponivel {
-  /** YYYY-MM-DD local */
-  date: string;
-  /** ex.: "seg., 21/07" */
-  display: string;
-}
-
 // ─── Moeda ────────────────────────────────────────────────────────────────────
 
 /**
@@ -66,15 +59,6 @@ const toDateObj = (date: DateLike): Date | null => {
 };
 
 /**
- * Formata uma data (Firestore Timestamp ou Date) para dd/mm/aaaa
- */
-export const formatDate = (date: DateLike): string => {
-  const dateObj = toDateObj(date);
-  if (!dateObj) return date ? 'Data inválida' : 'Data não disponível';
-  return dateObj.toLocaleDateString('pt-BR');
-};
-
-/**
  * Formata uma data com hora: dd/mm/aaaa às HH:mm
  */
 export const formatDateTime = (date: DateLike): string => {
@@ -98,35 +82,6 @@ export const toLocalDateString = (date: Date): string => {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-};
-
-/**
- * Retorna os próximos N dias úteis (sem domingos), com display formatado.
- * Usa data local para evitar bug de timezone com toISOString().
- */
-export const getNextDays = (qtd: number = 7): DiaDisponivel[] => {
-  const days: DiaDisponivel[] = [];
-  const today = new Date();
-  let count = 0;
-  let i = 0;
-
-  while (count < qtd) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i);
-    i++;
-    // Pular domingos (0 = domingo)
-    if (date.getDay() === 0) continue;
-    days.push({
-      date: toLocalDateString(date),
-      display: date.toLocaleDateString('pt-BR', {
-        weekday: 'short',
-        day: '2-digit',
-        month: '2-digit',
-      }),
-    });
-    count++;
-  }
-  return days;
 };
 
 // ─── Telefone ─────────────────────────────────────────────────────────────────

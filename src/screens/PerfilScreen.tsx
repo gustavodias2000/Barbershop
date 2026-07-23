@@ -146,8 +146,16 @@ export default function PerfilScreen({ navigation }: Props) {
           telefone: telefoneE164,
           ...(endereco.trim() ? { endereco: endereco.trim() } : {}),
           // Coordenadas só existem quando o endereço veio de uma sugestão do
-          // autocomplete — texto digitado livremente não tem lat/lng.
-          ...(coordenadas ? { latitude: coordenadas.lat, longitude: coordenadas.lng } : {}),
+          // autocomplete — texto digitado livremente não tem lat/lng. Nesse
+          // caso também grava `enderecoFormatado` (usado na tela de
+          // confirmação do agendamento e ao reabrir esta tela).
+          ...(coordenadas
+            ? {
+                latitude: coordenadas.lat,
+                longitude: coordenadas.lng,
+                enderecoFormatado: endereco.trim(),
+              }
+            : {}),
         });
       }
 

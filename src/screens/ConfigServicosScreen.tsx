@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import { upsertBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { atualizarProfissional } from '../data/repositories/NegocioRepository';
-import { formatMoney, precoParaCentavos } from '../utils/dateUtils';
+import { formatMoney } from '../utils/dateUtils';
 import { getServicosPreSelecionados } from '../utils/servicosPadrao';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';

@@ -73,9 +73,29 @@ export default function BarbeiroHome({ navigation }: Props) {
       if (!uid) return;
       const negocio = await getNegocioPorDono(uid);
       setNegocioId(negocio?.id ?? null);
-      const data = negocio
-        ? await listarPorNegocio(negocio.id, 50)
-        : await listarDoBarbeiro(uid, 50);
+      let data: Agendamento[];
+      if (negocio) {
+        // `listarPorNegocio` só enxerga agendamentos criados DEPOIS que a
+        // conta virou equipe (negocioId denormalizado). Sem isso, os
+        // agendamentos antigos do próprio dono (sem negocioId) sumiriam da
+        // agenda assim que ele criasse a equipe. Busca as duas fontes e
+        // remove duplicatas (agendamentos novos do dono aparecem nas duas).
+        const [doNegocio, proprios] = await Promise.all([
+          listarPorNegocio(negocio.id, 50),
+          listarDoBarbeiro(uid, 50),
+        ]);
+        const porId = new Map<string, Agendamento>();
+        [...doNegocio, ...proprios].forEach((ag) => {
+          if (ag.id) porId.set(ag.id, ag);
+        });
+        data = Array.from(porId.values()).sort((a, b) => {
+          const aMs = (a.createdAt as { toMillis?: () => number })?.toMillis?.() ?? 0;
+          const bMs = (b.createdAt as { toMillis?: () => number })?.toMillis?.() ?? 0;
+          return bMs - aMs;
+        });
+      } else {
+        data = await listarDoBarbeiro(uid, 50);
+      }
       setAgendamentos(data);
       setStats({
         pendentes:  data.filter((ag) => ag.status === 'pendente').length,

@@ -26,7 +26,7 @@ import { criarAgendamento } from '../data/repositories/AgendamentoRepository';
 import { getBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { entrarNaFila, jaEstaNaFila } from '../data/repositories/ListaEsperaRepository';
 import useUserProfile from '../hooks/useUserProfile';
-import { formatMoney, precoParaCentavos, toLocalDateString } from '../utils/dateUtils';
+import { formatMoney, toLocalDateString } from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type {
