@@ -15,7 +15,6 @@ import {
   collection,
   query,
   where,
-  limit,
   getDocs,
   getDoc,
   doc,
@@ -24,7 +23,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import type { Barbeiro, MembroEquipe, Negocio, PapelEquipe, TipoComissao } from '../../types';
-import { upsertBarbeiro } from './BarbeiroRepository';
+import { getBarbeiro, upsertBarbeiro } from './BarbeiroRepository';
 
 /**
  * Atualiza campos do doc público `barbeiros/{id}` de um profissional da
@@ -55,14 +54,23 @@ export async function getNegocio(negocioId?: string | null): Promise<Negocio | n
 
 /**
  * Busca o negócio do qual o uid logado é dono (no máximo um, hoje).
+ *
+ * Antes fazia uma QUERY em `negocios` (where donoUid == uid) — mas o
+ * Firestore não consegue provar a regra de segurança de `negocios` para
+ * esse tipo de busca (ela depende de uma leitura na subcoleção `membros`
+ * sem relação direta com o campo `donoUid` filtrado), e nega a operação
+ * inteira mesmo quando o usuário é o dono de verdade (reproduzido em teste
+ * real: "Missing or insufficient permissions" logo ao abrir Agenda/Equipe).
+ *
+ * Em vez disso, busca o `negocioId` já denormalizado no próprio doc
+ * `barbeiros/{donoUid}` (gravado por `criarNegocio`) e então busca o
+ * negócio por ID conhecido — um `get()` simples, que a regra já suporta.
  */
 export async function getNegocioPorDono(donoUid?: string | null): Promise<Negocio | null> {
   if (!donoUid) return null;
-  const q = query(collection(db, 'negocios'), where('donoUid', '==', donoUid), limit(1));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { ...(d.data() as Omit<Negocio, 'id'>), id: d.id };
+  const barbeiro = await getBarbeiro(donoUid);
+  if (!barbeiro?.negocioId) return null;
+  return getNegocio(barbeiro.negocioId);
 }
 
 /**
