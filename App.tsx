@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ThemeProvider } from './src/context/ThemeContext';
+import { ToastProvider } from './src/context/ToastContext';
 import type { RootStackParamList } from './src/types';
 
 // Navegação por tabs
@@ -44,6 +45,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function App() {
   return (
     <ThemeProvider>
+      <ToastProvider>
       <NavigationContainer>
         <Stack.Navigator
           initialRouteName="Login"
@@ -230,6 +232,7 @@ export default function App() {
           />
         </Stack.Navigator>
       </NavigationContainer>
+      </ToastProvider>
     </ThemeProvider>
   );
 }

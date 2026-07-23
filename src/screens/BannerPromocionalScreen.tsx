@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import { upsertBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { useTheme, type Theme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types';
 
@@ -27,6 +28,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'BannerPromocional'>;
 export default function BannerPromocionalScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
+  const { showToast } = useToast();
   const uid = auth.currentUser?.uid;
 
   const [texto, setTexto] = useState('');
@@ -64,9 +66,8 @@ export default function BannerPromocionalScreen({ navigation }: Props) {
       await upsertBarbeiro(uid, {
         bannerPromocional: { texto: texto.trim(), ativo },
       });
-      Alert.alert('Sucesso!', 'Banner promocional salvo.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      showToast('Banner promocional salvo.');
+      navigation.goBack();
     } catch (error) {
       console.error('Erro ao salvar banner:', error);
       Alert.alert('Erro', 'Não foi possível salvar. Tente novamente.');

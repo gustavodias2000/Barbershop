@@ -70,6 +70,9 @@ jest.mock('firebase/firestore', () => ({
   where: jest.fn(),
   orderBy: jest.fn(),
   limit: jest.fn(),
+  // writeBatch: usado por ClienteContatoRepository.importarClientesEmLote
+  // (importação de contatos em lotes de 400 — ver teste de regressão).
+  writeBatch: jest.fn(),
   serverTimestamp: jest.fn(() => ({ __serverTimestamp: true })),
 }));
 

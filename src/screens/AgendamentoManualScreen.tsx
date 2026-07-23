@@ -40,6 +40,7 @@ import {
 } from '../utils/agendaSlots';
 import { maskPhone, formatPhoneToE164, formatMoney, toLocalDateString } from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type {
   RootStackParamList,
@@ -66,6 +67,7 @@ export default function AgendamentoManualScreen({ route, navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
   const { profile: userProfile } = useUserProfile();
+  const { showToast } = useToast();
 
   const [config, setConfig] = useState<ConfiguracaoAgenda>(CONFIG_PADRAO);
   const [servicos, setServicos] = useState<ServicoBarbeiro[]>([]);
@@ -221,12 +223,11 @@ export default function AgendamentoManualScreen({ route, navigation }: Props) {
           selectedDate, selectedTime, barbeiroNome,
         );
         const enviado = await WhatsAppService.sendTextMessage(telefoneCliente, msg);
-        avisoWhatsapp = enviado ? ' O cliente foi avisado pelo WhatsApp.' : '';
+        avisoWhatsapp = enviado ? ' Cliente avisado pelo WhatsApp.' : '';
       }
 
-      Alert.alert('Agendamento criado!', `${nomeCliente} — ${selectedDate} às ${selectedTime}.${avisoWhatsapp}`, [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      showToast(`Agendado: ${nomeCliente} — ${selectedDate} às ${selectedTime}.${avisoWhatsapp}`);
+      navigation.goBack();
     } catch (error) {
       console.error('Erro ao criar agendamento manual:', error);
       Alert.alert('Erro', 'Não foi possível criar o agendamento. Tente novamente.');

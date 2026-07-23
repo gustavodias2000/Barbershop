@@ -25,6 +25,7 @@ import { upsertBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroReposi
 import { atualizarProfissional } from '../data/repositories/NegocioRepository';
 import { toLocalDateString } from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, BloqueioHorario } from '../types';
 
@@ -53,6 +54,7 @@ function gerarProximosDias(qtd: number) {
 export default function BloqueiosScreen({ navigation: _navigation, route }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
+  const { showToast } = useToast();
 
   const profissionalId = route.params?.profissionalId;
   const profissionalNome = route.params?.profissionalNome;
@@ -86,10 +88,11 @@ export default function BloqueiosScreen({ navigation: _navigation, route }: Prop
     }
   };
 
-  const salvarLista = async (novaLista: BloqueioHorario[]) => {
+  /** @returns true se salvou com sucesso — usado para só mostrar o toast quando a escrita realmente aconteceu. */
+  const salvarLista = async (novaLista: BloqueioHorario[]): Promise<boolean> => {
     setSaving(true);
     try {
-      if (!targetId) return;
+      if (!targetId) return false;
       const dados = { bloqueiosHorario: novaLista };
       if (profissionalId) {
         await atualizarProfissional(profissionalId, dados);
@@ -97,15 +100,17 @@ export default function BloqueiosScreen({ navigation: _navigation, route }: Prop
         await upsertBarbeiro(targetId, dados);
       }
       setBloqueios(novaLista);
+      return true;
     } catch (error) {
       console.error('Erro ao salvar bloqueios:', error);
       Alert.alert('Erro', 'Não foi possível salvar. Tente novamente.');
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAdicionar = () => {
+  const handleAdicionar = async () => {
     if (!dataEvento) {
       Alert.alert('Atenção', 'Selecione a data do evento.');
       return;
@@ -121,12 +126,17 @@ export default function BloqueiosScreen({ navigation: _navigation, route }: Prop
       horaFim,
       motivo: motivo.trim() || undefined,
     };
-    salvarLista([...bloqueios, novo].sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio)));
-    setMotivo('');
+    const lista = [...bloqueios, novo].sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
+    const ok = await salvarLista(lista);
+    if (ok) {
+      showToast('Bloqueio adicionado.');
+      setMotivo('');
+    }
   };
 
-  const handleRemover = (id: string) => {
-    salvarLista(bloqueios.filter((b) => b.id !== id));
+  const handleRemover = async (id: string) => {
+    const ok = await salvarLista(bloqueios.filter((b) => b.id !== id));
+    if (ok) showToast('Bloqueio removido.', 'info');
   };
 
   const renderPickerRow = (label: string, options: string[], current: string, onChange: (v: string) => void) => (

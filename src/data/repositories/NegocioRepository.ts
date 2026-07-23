@@ -24,6 +24,12 @@ import {
 } from 'firebase/firestore';
 import type { Barbeiro, MembroEquipe, Negocio, PapelEquipe, TipoComissao } from '../../types';
 import { getBarbeiro, upsertBarbeiro } from './BarbeiroRepository';
+import CacheService from '../../services/CacheService';
+
+// Mesmas chaves usadas em BarbeiroRepository — este arquivo também escreve
+// diretamente em `barbeiros/{id}` (profissionais de equipe sem login
+// próprio), então precisa invalidar o mesmo cache pra não servir dado velho.
+const PREFIXO_LISTA_BARBEIROS = 'barbeiros:list:';
 
 /**
  * Atualiza campos do doc público `barbeiros/{id}` de um profissional da
@@ -37,6 +43,8 @@ export async function atualizarProfissional(
   dados: Partial<Omit<Barbeiro, 'id' | 'uid'>>,
 ): Promise<void> {
   await setDoc(doc(db, 'barbeiros', barbeiroId), { ...dados, updatedAt: serverTimestamp() }, { merge: true });
+  CacheService.invalidate(`barbeiro:${barbeiroId}`);
+  CacheService.invalidatePrefix(PREFIXO_LISTA_BARBEIROS);
 }
 
 const membrosRef = (negocioId: string) =>
@@ -193,6 +201,9 @@ export async function criarProfissional(
     ativo: true,
     createdAt: serverTimestamp(),
   });
+
+  // Novo profissional deve aparecer na vitrine sem esperar o TTL do cache.
+  CacheService.invalidatePrefix(PREFIXO_LISTA_BARBEIROS);
 
   return barbeiro;
 }

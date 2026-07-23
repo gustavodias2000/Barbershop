@@ -118,4 +118,67 @@ describe('WhatsAppService', () => {
       expect(mensagem).toContain('14:00');
     });
   });
+
+  describe('gerarMensagemCancelamento', () => {
+    it('should include the reason when provided', () => {
+      const mensagem = WhatsAppService.gerarMensagemCancelamento(
+        { nome: 'Maria' }, '2024-01-15', '14:00', 'Reagendamento necessário',
+      );
+      expect(mensagem).toContain('Maria');
+      expect(mensagem).toContain('Reagendamento necessário');
+    });
+
+    it('should omit the "Motivo" section when no reason is given', () => {
+      const mensagem = WhatsAppService.gerarMensagemCancelamento(
+        { nome: 'Maria' }, '2024-01-15', '14:00',
+      );
+      expect(mensagem).not.toContain('Motivo');
+    });
+  });
+
+  describe('gerarMensagemAniversario', () => {
+    it('should include the client name and the barbershop name', () => {
+      const mensagem = WhatsAppService.gerarMensagemAniversario({ nome: 'Maria' }, 'Barbearia do João');
+      expect(mensagem).toContain('Maria');
+      expect(mensagem).toContain('Barbearia do João');
+      expect(mensagem).toContain('aniversário');
+    });
+  });
+
+  describe('gerarMensagemPromocional', () => {
+    it('should interpolate {nome_cliente} when present', () => {
+      const mensagem = WhatsAppService.gerarMensagemPromocional(
+        { nome: 'Maria' }, 'Olá {nome_cliente}! 20% de desconto essa semana.',
+      );
+      expect(mensagem).toBe('Olá Maria! 20% de desconto essa semana.');
+    });
+
+    it('should return the text unchanged when there is no placeholder', () => {
+      const texto = 'Promoção geral, sem nome.';
+      expect(WhatsAppService.gerarMensagemPromocional({ nome: 'Maria' }, texto)).toBe(texto);
+    });
+
+    it('should replace every occurrence of the placeholder, not just the first', () => {
+      const mensagem = WhatsAppService.gerarMensagemPromocional(
+        { nome: 'Maria' }, '{nome_cliente}, oi {nome_cliente}!',
+      );
+      expect(mensagem).toBe('Maria, oi Maria!');
+    });
+  });
+
+  describe('gerarMensagemComTemplate', () => {
+    it('should interpolate every supported variable', () => {
+      const mensagem = WhatsAppService.gerarMensagemComTemplate(
+        'Olá {nome_cliente}, {nome_barbeiro} confirma {servico} em {data} às {horario}.',
+        {
+          nome_barbeiro: 'João',
+          nome_cliente: 'Maria',
+          data: '2024-01-15',
+          horario: '14:00',
+          servico: 'Corte',
+        },
+      );
+      expect(mensagem).toBe('Olá Maria, João confirma Corte em 2024-01-15 às 14:00.');
+    });
+  });
 });

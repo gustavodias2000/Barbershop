@@ -27,6 +27,7 @@ import useUserProfile from '../hooks/useUserProfile';
 import { formatDateTime, formatPreco, toLocalDateString } from '../utils/dateUtils';
 import { contarSubSlotsDoDia } from '../utils/agendaSlots';
 import { useTheme, type Theme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { SkeletonList } from '../components/Skeleton';
 import CalendarioMensal, { type StatusDia } from '../components/CalendarioMensal';
@@ -58,6 +59,7 @@ export default function BarbeiroHome({ navigation }: Props) {
   const s = getStyles(theme);
 
   const { profile: userProfile, refresh: refreshProfile } = useUserProfile();
+  const { showToast } = useToast();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -212,11 +214,11 @@ export default function BarbeiroHome({ navigation }: Props) {
                 ag.data, ag.horario, barbeiroNome,
               );
               const enviado = await WhatsAppService.sendTextMessage(ag.clienteTelefone, msg);
-              Alert.alert('Sucesso!', enviado
+              showToast(enviado
                 ? 'Confirmado e cliente notificado via WhatsApp!'
                 : 'Confirmado. Cliente sem WhatsApp cadastrado.');
             } else {
-              Alert.alert('Sucesso!', 'Agendamento confirmado.');
+              showToast('Agendamento confirmado.');
             }
             await fetchAgendamentos();
           } catch {
@@ -244,7 +246,7 @@ export default function BarbeiroHome({ navigation }: Props) {
               );
               await WhatsAppService.sendTextMessage(ag.clienteTelefone, msg);
             }
-            Alert.alert('Cancelado', 'Agendamento cancelado.');
+            showToast('Agendamento cancelado.', 'info');
             await fetchAgendamentos();
           } catch {
             Alert.alert('Erro', 'Não foi possível cancelar.');
@@ -275,7 +277,7 @@ export default function BarbeiroHome({ navigation }: Props) {
               }
             }
             await atualizarStatus(ag.id, 'concluido', extras);
-            Alert.alert('Sucesso!', 'Atendimento concluído.');
+            showToast('Atendimento concluído.');
             await fetchAgendamentos();
           } catch {
             Alert.alert('Erro', 'Não foi possível concluir.');
