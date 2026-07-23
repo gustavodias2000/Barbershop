@@ -76,6 +76,13 @@ const GRUPOS: ItemConfig[][] = [
   ],
   [
     {
+      icon: '🧑‍🤝‍🧑',
+      label: 'Minha Equipe',
+      desc: 'Cadastre profissionais e configure comissões',
+      route: 'Equipe',
+      cor: '#6C5CE7',
+    },
+    {
       icon: '👥',
       label: 'Clientes',
       desc: 'Importe contatos ou cadastre clientes manualmente',

@@ -69,6 +69,48 @@ export async function listarDoBarbeiro(
 }
 
 /**
+ * Lista os agendamentos de todos os profissionais de um negócio (equipe).
+ * Usado pelo dono, que gerencia a agenda de todo mundo a partir do próprio
+ * login (profissionais da equipe não têm conta própria — ver NegocioRepository).
+ */
+export async function listarPorNegocio(
+  negocioId?: string | null,
+  max: number = 50,
+): Promise<Agendamento[]> {
+  if (!negocioId) return [];
+  const snap = await getDocs(
+    query(
+      collection(db, 'agendamentos'),
+      where('negocioId', '==', negocioId),
+      orderBy('createdAt', 'desc'),
+      limit(max),
+    ),
+  );
+  return snap.docs.map(fromSnap);
+}
+
+/**
+ * Lista os agendamentos concluídos de um negócio num período — base do
+ * relatório de fechamento de comissões (soma por profissional).
+ */
+export async function listarConcluidosPorNegocio(
+  negocioId: string,
+  dataInicio: string,
+  dataFim: string,
+): Promise<Agendamento[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, 'agendamentos'),
+      where('negocioId', '==', negocioId),
+      where('status', '==', 'concluido'),
+      where('data', '>=', dataInicio),
+      where('data', '<=', dataFim),
+    ),
+  );
+  return snap.docs.map(fromSnap);
+}
+
+/**
  * Cria um novo agendamento. createdAt é sempre do servidor.
  * @returns id do documento criado
  */

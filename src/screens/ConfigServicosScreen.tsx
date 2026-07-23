@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import { upsertBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroRepository';
+import { atualizarProfissional } from '../data/repositories/NegocioRepository';
 import { formatMoney, precoParaCentavos } from '../utils/dateUtils';
 import { getServicosPreSelecionados } from '../utils/servicosPadrao';
 import { useTheme, type Theme } from '../context/ThemeContext';
@@ -43,9 +44,13 @@ function generateId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export default function ConfigServicosScreen({ navigation }: Props) {
+export default function ConfigServicosScreen({ navigation, route }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
+
+  const profissionalId = route.params?.profissionalId;
+  const profissionalNome = route.params?.profissionalNome;
+  const targetId = profissionalId || auth.currentUser?.uid;
 
   const [servicos, setServicos] = useState<ServicoBarbeiro[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,9 +69,8 @@ export default function ConfigServicosScreen({ navigation }: Props) {
 
   const loadServicos = async () => {
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      const barbeiro = await getBarbeiro(uid);
+      if (!targetId) return;
+      const barbeiro = await getBarbeiro(targetId);
       if (barbeiro?.servicos && barbeiro.servicos.length > 0) {
         setServicos(barbeiro.servicos);
       } else {
@@ -146,9 +150,12 @@ export default function ConfigServicosScreen({ navigation }: Props) {
     }
     setSaving(true);
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      await upsertBarbeiro(uid, { servicos });
+      if (!targetId) return;
+      if (profissionalId) {
+        await atualizarProfissional(profissionalId, { servicos });
+      } else {
+        await upsertBarbeiro(targetId, { servicos });
+      }
       Alert.alert('Sucesso!', 'Serviços salvos com sucesso.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -177,10 +184,19 @@ export default function ConfigServicosScreen({ navigation }: Props) {
         keyExtractor={(item) => item.id}
         contentContainerStyle={s.list}
         ListHeaderComponent={
-          <Text style={s.subtitle}>
-            Defina seus serviços com duração e preço. O agendamento inteligente
-            calculará os horários disponíveis com base na duração.
-          </Text>
+          <>
+            {profissionalId && (
+              <View style={s.profissionalBanner}>
+                <Text style={s.profissionalBannerText}>
+                  Editando os serviços de {profissionalNome || 'um profissional da equipe'}
+                </Text>
+              </View>
+            )}
+            <Text style={s.subtitle}>
+              Defina seus serviços com duração e preço. O agendamento inteligente
+              calculará os horários disponíveis com base na duração.
+            </Text>
+          </>
         }
         ListEmptyComponent={
           <View style={s.emptyContainer}>
@@ -334,6 +350,18 @@ const getStyles = (theme: Theme) =>
       color: theme.colors.textSecondary,
       marginBottom: 16,
       lineHeight: 20,
+    },
+    profissionalBanner: {
+      backgroundColor: theme.colors.primary + '20',
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 12,
+    },
+    profissionalBannerText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.primary,
+      textAlign: 'center',
     },
     emptyContainer: {
       alignItems: 'center',

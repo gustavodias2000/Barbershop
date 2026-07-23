@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,38 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<any, 'Barbeiros'>,
   NativeStackScreenProps<RootStackParamList>
 >;
+
+interface GrupoVitrine {
+  negocioId: string | null; // null = profissional solo (comportamento de sempre)
+  negocioNome?: string;
+  profissionais: Barbeiro[];
+}
+
+/**
+ * Agrupa profissionais da mesma equipe (mesmo `negocioId`) sob um único
+ * card, mantendo profissionais solo exatamente como antes (1 card cada).
+ * Esconde profissionais desativados pelo dono (`ativo === false`).
+ */
+function agruparPorNegocio(barbeiros: Barbeiro[]): GrupoVitrine[] {
+  const visiveis = barbeiros.filter((b) => b.ativo !== false);
+  const grupos: GrupoVitrine[] = [];
+  const indexPorNegocio = new Map<string, number>();
+
+  for (const b of visiveis) {
+    if (!b.negocioId) {
+      grupos.push({ negocioId: null, profissionais: [b] });
+      continue;
+    }
+    const idx = indexPorNegocio.get(b.negocioId);
+    if (idx === undefined) {
+      indexPorNegocio.set(b.negocioId, grupos.length);
+      grupos.push({ negocioId: b.negocioId, negocioNome: b.negocioNome, profissionais: [b] });
+    } else {
+      grupos[idx].profissionais.push(b);
+    }
+  }
+  return grupos;
+}
 
 export default function ClienteHome({ navigation }: Props) {
   const { theme } = useTheme();
@@ -98,21 +130,21 @@ export default function ClienteHome({ navigation }: Props) {
     }
   };
 
-  const renderBarbeiro = ({ item }: { item: Barbeiro }) => (
-    <View style={s.barbeiroCard}>
-      <View style={s.barbeiroInfo}>
-        <View style={s.avatarContainer}>
-          <Text style={s.avatarText} accessibilityElementsHidden>
-            {item.nome ? item.nome.charAt(0).toUpperCase() : 'B'}
-          </Text>
-        </View>
-        <View style={s.barbeiroDetails}>
-          <Text style={s.barbeiroNome}>{item.nome || 'Barbeiro'}</Text>
-          <Text style={s.barbeiroEspecialidade}>
-            {item.especialidade || 'Corte e barba'}
-          </Text>
-          <Text style={s.barbeiroPreco}>{formatPreco(item)}</Text>
-        </View>
+  const grupos = useMemo(() => agruparPorNegocio(barbeiros), [barbeiros]);
+
+  const renderProfissionalRow = (item: Barbeiro, comBorda: boolean) => (
+    <View key={item.id} style={[s.profissionalRow, comBorda && s.profissionalRowBorda]}>
+      <View style={s.avatarContainer}>
+        <Text style={s.avatarText} accessibilityElementsHidden>
+          {item.nome ? item.nome.charAt(0).toUpperCase() : 'B'}
+        </Text>
+      </View>
+      <View style={s.barbeiroDetails}>
+        <Text style={s.barbeiroNome}>{item.nome || 'Barbeiro'}</Text>
+        <Text style={s.barbeiroEspecialidade}>
+          {item.especialidade || 'Corte e barba'}
+        </Text>
+        <Text style={s.barbeiroPreco}>{formatPreco(item)}</Text>
       </View>
       <TouchableOpacity
         style={s.agendarButton}
@@ -124,6 +156,27 @@ export default function ClienteHome({ navigation }: Props) {
       </TouchableOpacity>
     </View>
   );
+
+  const renderGrupo = ({ item }: { item: GrupoVitrine }) => {
+    // Profissional solo: card único, exatamente como antes.
+    if (!item.negocioId) {
+      return (
+        <View style={s.barbeiroCard}>
+          {renderProfissionalRow(item.profissionais[0], false)}
+        </View>
+      );
+    }
+    // Equipe: um card com o nome do negócio no topo e um profissional por linha.
+    return (
+      <View style={s.barbeiroCard}>
+        <View style={s.negocioHeader}>
+          <Text style={s.negocioIcon}>💈</Text>
+          <Text style={s.negocioNomeText}>{item.negocioNome || 'Barbearia'}</Text>
+        </View>
+        {item.profissionais.map((p, i) => renderProfissionalRow(p, i > 0))}
+      </View>
+    );
+  };
 
   const renderAgendamento = ({ item }: { item: Agendamento }) => (
     <View style={s.agendamentoCard}>
@@ -165,9 +218,9 @@ export default function ClienteHome({ navigation }: Props) {
       </View>
 
       <FlatList
-        data={barbeiros}
-        keyExtractor={(item) => item.id}
-        renderItem={renderBarbeiro}
+        data={grupos}
+        keyExtractor={(item) => item.negocioId ?? item.profissionais[0].id}
+        renderItem={renderGrupo}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -267,10 +320,31 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  barbeiroInfo: {
+  profissionalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profissionalRowBorda: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderLight,
+  },
+  negocioHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  negocioIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  negocioNomeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   avatarContainer: {
     width: 50,
@@ -307,12 +381,13 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   agendarButton: {
     backgroundColor: theme.colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
     minHeight: 44,
     justifyContent: 'center',
+    marginLeft: 8,
   },
   agendarButtonText: {
     color: '#fff',

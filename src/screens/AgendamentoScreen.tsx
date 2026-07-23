@@ -351,6 +351,10 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
         barbeiroId: barbeiro.id,
         barbeiroNome: barbeiro.nome,
         barbeiroTelefone,
+        // Denormalizado (só quando existir) para permitir ao dono da equipe
+        // ver e gerenciar este agendamento, e para o relatório de comissões.
+        // Evita gravar `negocioId: undefined` explicitamente no Firestore.
+        ...(barbeiro.negocioId ? { negocioId: barbeiro.negocioId } : {}),
         cliente: userEmail,
         clienteUid: auth.currentUser?.uid || '',
         clienteNome,

@@ -22,6 +22,22 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.tipo == 'barbeiro';
     }
 
+    // ---- Multi-profissional (negócios/equipe) ----
+    // O usuário logado é o dono do negócio indicado (papel == 'dono' na
+    // subcoleção privada de membros).
+    function isDonoDoNegocio(negocioId) {
+      return isSignedIn() && negocioId != null
+        && exists(/databases/$(database)/documents/negocios/$(negocioId)/membros/$(request.auth.uid))
+        && get(/databases/$(database)/documents/negocios/$(negocioId)/membros/$(request.auth.uid)).data.papel == 'dono';
+    }
+
+    // O usuário logado é dono do negócio ao qual este barbeiroId pertence
+    // (usado quando o doc em questão não é o próprio Barbeiro, ex.: clientes).
+    function isDonoDoBarbeiro(barbeiroId) {
+      return exists(/databases/$(database)/documents/barbeiros/$(barbeiroId))
+        && isDonoDoNegocio(get(/databases/$(database)/documents/barbeiros/$(barbeiroId)).data.get('negocioId', null));
+    }
+
     // ---- Perfis de usuário ----
     match /usuarios/{uid} {
       allow read:   if isOwner(uid);
@@ -36,13 +52,38 @@ service cloud.firestore {
     // ---- Barbeiros (vitrine pública para clientes logados) ----
     match /barbeiros/{barbeiroId} {
       allow read:  if isSignedIn();
-      // Só o próprio barbeiro (doc id == uid) e que seja do tipo barbeiro pode escrever
-      allow write: if isOwner(barbeiroId) && isBarbeiro();
+      // O próprio barbeiro (doc id == uid, profissional solo ou dono de
+      // equipe) pode escrever no próprio doc; o dono de um negócio também
+      // pode criar/editar os profissionais da própria equipe (que não têm
+      // login próprio — ver NegocioRepository).
+      allow create: if (isOwner(barbeiroId) && isBarbeiro())
+                    || isDonoDoNegocio(request.resource.data.get('negocioId', null));
+      allow update, delete: if (isOwner(barbeiroId) && isBarbeiro())
+                    || isDonoDoNegocio(resource.data.get('negocioId', null));
 
       // ---- Agenda de clientes do barbeiro (cadastro manual/importado) ----
-      // Privada: só o próprio barbeiro dono acessa (nunca exposta ao cliente).
+      // Privada: só o próprio barbeiro dono (ou o dono do negócio, se este
+      // profissional faz parte de uma equipe) acessa.
       match /clientes/{clienteId} {
-        allow read, write: if isOwner(barbeiroId) && isBarbeiro();
+        allow read, write: if (isOwner(barbeiroId) && isBarbeiro()) || isDonoDoBarbeiro(barbeiroId);
+      }
+    }
+
+    // ---- Negócios (equipe multi-profissional) ----
+    match /negocios/{negocioId} {
+      allow read:   if isDonoDoNegocio(negocioId);
+      allow create: if isSignedIn() && isBarbeiro() && request.resource.data.donoUid == request.auth.uid;
+      allow update, delete: if isDonoDoNegocio(negocioId);
+
+      // Papel e comissão de cada profissional — só o dono acessa.
+      // A 2ª condição resolve o "ovo e a galinha" da criação do negócio: o
+      // 1º membro (o próprio dono) ainda não existe quando isDonoDoNegocio()
+      // seria avaliado, então validamos direto contra negocios/{id}.donoUid.
+      match /membros/{membroId} {
+        allow read, write: if isDonoDoNegocio(negocioId)
+          || (membroId == request.auth.uid
+              && get(/databases/$(database)/documents/negocios/$(negocioId)).data.donoUid == request.auth.uid
+              && request.resource.data.papel == 'dono');
       }
     }
 
@@ -50,10 +91,15 @@ service cloud.firestore {
     // Item 9.3: identidade primária por clienteUid (imutável).
     // O email é mantido apenas como fallback para docs antigos.
     match /agendamentos/{id} {
+      // `negocioId` é denormalizado do Barbeiro na criação (ver AgendamentoScreen):
+      // permite ao dono de uma equipe ver/gerenciar os agendamentos de
+      // qualquer profissional do próprio negócio, sem precisar de login
+      // separado por profissional.
       allow read: if isSignedIn()
         && (resource.data.clienteUid == request.auth.uid
             || resource.data.cliente == request.auth.token.email
-            || resource.data.barbeiroId == request.auth.uid);
+            || resource.data.barbeiroId == request.auth.uid
+            || isDonoDoNegocio(resource.data.get('negocioId', null)));
 
       allow create: if isSignedIn()
         && request.resource.data.clienteUid == request.auth.uid;
@@ -61,10 +107,12 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && (resource.data.clienteUid == request.auth.uid
             || resource.data.cliente == request.auth.token.email
-            || resource.data.barbeiroId == request.auth.uid);
+            || resource.data.barbeiroId == request.auth.uid
+            || isDonoDoNegocio(resource.data.get('negocioId', null)));
 
       allow delete: if isSignedIn()
-        && resource.data.barbeiroId == request.auth.uid;
+        && (resource.data.barbeiroId == request.auth.uid
+            || isDonoDoNegocio(resource.data.get('negocioId', null)));
     }
 
     // ---- Ocupação de horários (SEM dados pessoais) ----

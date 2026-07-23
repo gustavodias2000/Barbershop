@@ -81,6 +81,44 @@ export interface ClienteContato {
   createdAt?: FirestoreDate;
 }
 
+// ─── Negócio / equipe multi-profissional ──────────────────────────────────────
+
+/**
+ * Um negócio agrupa vários profissionais (Barbeiro) sob um dono único.
+ * Opcional: barbeiros solo (sem equipe) nunca têm `negocioId` e continuam
+ * funcionando exatamente como antes.
+ */
+export interface Negocio {
+  id: string;
+  donoUid: string;
+  nome: string;
+  endereco?: string;
+  createdAt?: FirestoreDate;
+  updatedAt?: FirestoreDate;
+}
+
+export type PapelEquipe = 'dono' | 'profissional';
+export type TipoComissao = 'percentual' | 'fixo';
+
+/**
+ * Membro da equipe de um negócio — dado privado (nunca exposto na vitrine
+ * pública do barbeiro). Guarda o papel e a configuração de comissão.
+ * O id do documento é sempre igual ao `barbeiroId`.
+ */
+export interface MembroEquipe {
+  id: string;
+  barbeiroId: string;
+  papel: PapelEquipe;
+  ativo: boolean;
+  comissaoTipo?: TipoComissao;
+  /** 0–100, usado quando comissaoTipo === 'percentual' */
+  comissaoPercentual?: number;
+  /** Em centavos, usado quando comissaoTipo === 'fixo' */
+  comissaoFixaCentavos?: number;
+  createdAt?: FirestoreDate;
+  updatedAt?: FirestoreDate;
+}
+
 // ─── Clientes banidos ─────────────────────────────────────────────────────────
 
 export interface ClienteBanido {
@@ -130,6 +168,23 @@ export interface Barbeiro {
   endereco?: string;
   /** Datas em que o barbeiro não atende (formato YYYY-MM-DD) — folgas, férias, feriados */
   datasBloqueadas?: DataISO[];
+  /**
+   * Presente quando este profissional faz parte de uma equipe (negócio).
+   * Ausente = profissional solo, comportamento idêntico ao de sempre.
+   */
+  negocioId?: string;
+  /**
+   * Nome do negócio, denormalizado para a vitrine do cliente poder agrupar
+   * profissionais da mesma equipe sem precisar ler `negocios/{id}` (coleção
+   * privada, só o dono tem acesso).
+   */
+  negocioNome?: string;
+  /**
+   * Visibilidade na vitrine para membros de equipe (ausente/true = visível).
+   * Espelha `MembroEquipe.ativo`, mas fica no doc público porque a vitrine
+   * do cliente não tem acesso à subcoleção privada de membros do negócio.
+   */
+  ativo?: boolean;
   createdAt?: FirestoreDate;
   updatedAt?: FirestoreDate;
 }
@@ -150,6 +205,12 @@ export interface Agendamento {
   servico?: string;
   preco?: string;
   precoEmCentavos?: number;
+  /** Denormalizado do Barbeiro no momento da criação — usado nas regras de
+   * segurança (dono do negócio pode ver/gerenciar) e no relatório de comissões. */
+  negocioId?: string;
+  /** Comissão calculada (centavos) quando o agendamento é concluído, se o
+   * profissional pertence a uma equipe com comissão configurada. */
+  comissaoCentavos?: number;
   rating?: number;
   paymentMethod?: string;
   cancelledBy?: 'cliente' | 'barbeiro';
@@ -230,11 +291,16 @@ export type RootStackParamList = {
   Perfil: undefined;
   Privacidade: undefined;
   // Telas de configuração do barbeiro
-  ConfigAgenda: undefined;
-  Folgas: undefined;
-  ConfigServicos: undefined;
+  // profissionalId presente = dono editando um membro da equipe;
+  // ausente = usuário logado editando o próprio perfil (comportamento de sempre).
+  ConfigAgenda: { profissionalId?: string; profissionalNome?: string } | undefined;
+  Folgas: { profissionalId?: string; profissionalNome?: string } | undefined;
+  ConfigServicos: { profissionalId?: string; profissionalNome?: string } | undefined;
   SetupBarbeiro: undefined;
   Clientes: undefined;
+  Equipe: undefined;
+  EditarProfissional: { profissionalId?: string } | undefined;
+  Comissoes: undefined;
   TemplatesMensagem: undefined;
   ClientesBanidos: undefined;
   HistoricoCliente: { clienteUid: string; clienteNome: string; barbeiroId: string };

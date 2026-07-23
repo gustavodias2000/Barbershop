@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import { upsertBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroRepository';
+import { atualizarProfissional } from '../data/repositories/NegocioRepository';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, ConfiguracaoAgenda } from '../types';
@@ -86,9 +87,15 @@ const DEFAULT_CONFIG: ConfiguracaoAgenda = {
   turnoExtraFim: '21:00',
 };
 
-export default function ConfigAgendaScreen({ navigation }: Props) {
+export default function ConfigAgendaScreen({ navigation, route }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
+
+  // Dono editando um membro da equipe (via EditarProfissionalScreen) passa
+  // profissionalId; ausência = comportamento de sempre (o próprio uid logado).
+  const profissionalId = route.params?.profissionalId;
+  const profissionalNome = route.params?.profissionalNome;
+  const targetId = profissionalId || auth.currentUser?.uid;
 
   const [config, setConfig] = useState<ConfiguracaoAgenda>(DEFAULT_CONFIG);
   const [mensagemPos, setMensagemPos] = useState('');
@@ -102,9 +109,8 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
 
   const loadConfig = async () => {
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      const barbeiro = await getBarbeiro(uid);
+      if (!targetId) return;
+      const barbeiro = await getBarbeiro(targetId);
       if (barbeiro?.configuracaoAgenda) {
         const c = { ...DEFAULT_CONFIG, ...barbeiro.configuracaoAgenda };
         setConfig(c);
@@ -168,12 +174,16 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
 
     setSaving(true);
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      await upsertBarbeiro(uid, {
+      if (!targetId) return;
+      const dados = {
         configuracaoAgenda: configToSave,
         mensagemPosAgendamento: mensagemPos.trim() || undefined,
-      });
+      };
+      if (profissionalId) {
+        await atualizarProfissional(profissionalId, dados);
+      } else {
+        await upsertBarbeiro(targetId, dados);
+      }
       Alert.alert('Sucesso!', 'Configuração de horários salva.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -224,6 +234,14 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={s.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={s.scroll}>
+
+        {profissionalId && (
+          <View style={s.profissionalBanner}>
+            <Text style={s.profissionalBannerText}>
+              Editando a agenda de {profissionalNome || 'um profissional da equipe'}
+            </Text>
+          </View>
+        )}
 
         {/* Dias de atendimento */}
         <View style={s.card}>
@@ -410,7 +428,7 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
         {/* Dias de folga */}
         <TouchableOpacity
           style={s.folgasLink}
-          onPress={() => navigation.navigate('Folgas')}
+          onPress={() => navigation.navigate('Folgas', profissionalId ? { profissionalId, profissionalNome } : undefined)}
           accessibilityRole="button"
           accessibilityLabel="Gerenciar dias de folga"
         >
@@ -506,6 +524,18 @@ const getStyles = (theme: Theme) =>
     scroll: {
       padding: 16,
       paddingBottom: 40,
+    },
+    profissionalBanner: {
+      backgroundColor: theme.colors.primary + '20',
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 16,
+    },
+    profissionalBannerText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.primary,
+      textAlign: 'center',
     },
     card: {
       backgroundColor: theme.colors.surface,

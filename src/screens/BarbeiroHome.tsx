@@ -17,8 +17,10 @@ import { auth } from '../../firebaseConfig';
 import WhatsAppService from '../services/WhatsAppService';
 import {
   listarDoBarbeiro,
+  listarPorNegocio,
   atualizarStatus,
 } from '../data/repositories/AgendamentoRepository';
+import { getNegocioPorDono, getMembro } from '../data/repositories/NegocioRepository';
 import { liberarSlot } from '../services/OcupacaoService';
 import useUserProfile from '../hooks/useUserProfile';
 import { formatDateTime, formatPreco } from '../utils/dateUtils';
@@ -47,6 +49,9 @@ export default function BarbeiroHome({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ pendentes: 0, confirmados: 0, total: 0 });
+  // Presente quando o usuário logado é dono de uma equipe — nesse caso a
+  // agenda mostra os agendamentos de TODOS os profissionais do negócio.
+  const [negocioId, setNegocioId] = useState<string | null>(null);
 
   useEffect(() => {
     checkOnboarding();
@@ -66,7 +71,11 @@ export default function BarbeiroHome({ navigation }: Props) {
     try {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
-      const data = await listarDoBarbeiro(uid, 50);
+      const negocio = await getNegocioPorDono(uid);
+      setNegocioId(negocio?.id ?? null);
+      const data = negocio
+        ? await listarPorNegocio(negocio.id, 50)
+        : await listarDoBarbeiro(uid, 50);
       setAgendamentos(data);
       setStats({
         pendentes:  data.filter((ag) => ag.status === 'pendente').length,
@@ -154,7 +163,20 @@ export default function BarbeiroHome({ navigation }: Props) {
         text: 'Concluir',
         onPress: async () => {
           try {
-            await atualizarStatus(ag.id, 'concluido');
+            const extras: Record<string, unknown> = {};
+            // Calcula a comissão do profissional (se a equipe tiver uma
+            // configurada) no momento em que o atendimento é concluído.
+            if (ag.negocioId && ag.precoEmCentavos) {
+              const membro = await getMembro(ag.negocioId, ag.barbeiroId);
+              if (membro?.comissaoTipo === 'percentual' && membro.comissaoPercentual) {
+                extras.comissaoCentavos = Math.round(
+                  (ag.precoEmCentavos * membro.comissaoPercentual) / 100,
+                );
+              } else if (membro?.comissaoTipo === 'fixo' && membro.comissaoFixaCentavos) {
+                extras.comissaoCentavos = membro.comissaoFixaCentavos;
+              }
+            }
+            await atualizarStatus(ag.id, 'concluido', extras);
             Alert.alert('Sucesso!', 'Atendimento concluído.');
             await fetchAgendamentos();
           } catch {
@@ -190,6 +212,9 @@ export default function BarbeiroHome({ navigation }: Props) {
       </View>
 
       <View style={s.cardBody}>
+        {negocioId && item.barbeiroNome && (
+          <Text style={s.infoProfissional}>💈 {item.barbeiroNome}</Text>
+        )}
         <Text style={s.infoData}>📅 {item.data} às {item.horario}</Text>
         <Text style={s.infoServico}>✂️ {item.servico || 'Corte e barba'} · {formatPreco(item)}</Text>
         <Text style={s.infoCreated}>Solicitado em: {formatDateTime(item.createdAt)}</Text>
@@ -199,7 +224,7 @@ export default function BarbeiroHome({ navigation }: Props) {
               navigation.navigate('HistoricoCliente', {
                 clienteUid: item.clienteUid,
                 clienteNome: item.clienteNome,
-                barbeiroId: barbeiroUid,
+                barbeiroId: item.barbeiroId || barbeiroUid,
               })
             }
             accessibilityRole="button"
@@ -367,6 +392,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   statusText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   cardBody: { marginBottom: 12 },
+  infoProfissional: { fontSize: 13, fontWeight: '700', color: theme.colors.primary, marginBottom: 4 },
   infoData: { fontSize: 15, color: theme.colors.text, marginBottom: 3 },
   infoServico: { fontSize: 14, color: theme.colors.textSecondary, marginBottom: 3 },
   infoCreated: { fontSize: 12, color: theme.colors.textMuted },

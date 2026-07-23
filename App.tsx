@@ -30,6 +30,9 @@ import ListaEsperaScreen from './src/screens/ListaEsperaScreen';
 import RecorrenciasScreen from './src/screens/RecorrenciasScreen';
 import CriarRecorrenciaScreen from './src/screens/CriarRecorrenciaScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import EquipeScreen from './src/screens/EquipeScreen';
+import EditarProfissionalScreen from './src/screens/EditarProfissionalScreen';
+import ComissoesScreen from './src/screens/ComissoesScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -130,6 +133,21 @@ export default function App() {
             name="Clientes"
             component={ClientesScreen}
             options={{ title: 'Clientes' }}
+          />
+          <Stack.Screen
+            name="Equipe"
+            component={EquipeScreen}
+            options={{ title: 'Minha Equipe' }}
+          />
+          <Stack.Screen
+            name="EditarProfissional"
+            component={EditarProfissionalScreen}
+            options={{ title: 'Profissional' }}
+          />
+          <Stack.Screen
+            name="Comissoes"
+            component={ComissoesScreen}
+            options={{ title: 'Comissões' }}
           />
           <Stack.Screen
             name="TemplatesMensagem"

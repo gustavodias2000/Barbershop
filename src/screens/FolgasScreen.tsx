@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import { upsertBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroRepository';
+import { atualizarProfissional } from '../data/repositories/NegocioRepository';
 import { toLocalDateString } from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -50,9 +51,13 @@ function gerarProximosDias(qtd: number): DiaCandidato[] {
   return result;
 }
 
-export default function FolgasScreen({ navigation }: Props) {
+export default function FolgasScreen({ navigation, route }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
+
+  const profissionalId = route.params?.profissionalId;
+  const profissionalNome = route.params?.profissionalNome;
+  const targetId = profissionalId || auth.currentUser?.uid;
 
   const [bloqueadas, setBloqueadas] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -66,9 +71,8 @@ export default function FolgasScreen({ navigation }: Props) {
 
   const loadFolgas = async () => {
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      const barbeiro = await getBarbeiro(uid);
+      if (!targetId) return;
+      const barbeiro = await getBarbeiro(targetId);
       setBloqueadas(new Set(barbeiro?.datasBloqueadas ?? []));
     } catch (error) {
       console.error('Erro ao carregar folgas:', error);
@@ -92,11 +96,13 @@ export default function FolgasScreen({ navigation }: Props) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-      await upsertBarbeiro(uid, {
-        datasBloqueadas: Array.from(bloqueadas).sort(),
-      });
+      if (!targetId) return;
+      const dados = { datasBloqueadas: Array.from(bloqueadas).sort() };
+      if (profissionalId) {
+        await atualizarProfissional(profissionalId, dados);
+      } else {
+        await upsertBarbeiro(targetId, dados);
+      }
       Alert.alert('Sucesso!', 'Dias de folga salvos.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -120,6 +126,14 @@ export default function FolgasScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={s.container} edges={['bottom']}>
+      {profissionalId && (
+        <View style={s.profissionalBanner}>
+          <Text style={s.profissionalBannerText}>
+            Editando as folgas de {profissionalNome || 'um profissional da equipe'}
+          </Text>
+        </View>
+      )}
+
       <View style={s.hintCard}>
         <Text style={s.hintText}>
           Toque em uma data para bloqueá-la. Datas bloqueadas não aparecem
@@ -188,6 +202,19 @@ const getStyles = (theme: Theme) =>
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
+    },
+    profissionalBanner: {
+      backgroundColor: theme.colors.primary + '20',
+      borderRadius: 10,
+      padding: 12,
+      margin: 16,
+      marginBottom: 0,
+    },
+    profissionalBannerText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.primary,
+      textAlign: 'center',
     },
     hintCard: {
       backgroundColor: theme.colors.surface,
