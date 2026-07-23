@@ -34,6 +34,8 @@ import {
 import {
   maskPhone,
   formatPhoneToE164,
+  formatPhoneDisplay,
+  removerCodigoPaisBrasil,
   maskDiaMes,
   diaMesParaAniversario,
   aniversarioParaExibicao,
@@ -97,7 +99,7 @@ export default function ClientesScreen({ navigation }: Props) {
   const abrirModalEdicao = (cliente: ClienteContato) => {
     setClienteEditando(cliente);
     setNomeManual(cliente.nome);
-    setTelefoneManual(cliente.telefone ? maskPhone(cliente.telefone.replace(/^55/, '')) : '');
+    setTelefoneManual(cliente.telefone ? maskPhone(removerCodigoPaisBrasil(cliente.telefone)) : '');
     setAniversarioManual(cliente.aniversario ? aniversarioParaExibicao(cliente.aniversario) : '');
     setModalVisible(true);
   };
@@ -330,7 +332,7 @@ export default function ClientesScreen({ navigation }: Props) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.clienteNome}>{item.nome}</Text>
-              {item.telefone ? <Text style={s.clienteTelefone}>{item.telefone}</Text> : null}
+              {item.telefone ? <Text style={s.clienteTelefone}>{formatPhoneDisplay(item.telefone)}</Text> : null}
               {item.aniversario ? (
                 <Text style={s.clienteTelefone}>🎂 {aniversarioParaExibicao(item.aniversario)}</Text>
               ) : null}

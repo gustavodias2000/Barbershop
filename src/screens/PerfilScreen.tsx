@@ -32,7 +32,7 @@ import {
 } from '../services/GeocodingService';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import ThemeSelector from '../components/ThemeSelector';
-import { maskPhone, formatPhoneToE164 } from '../utils/dateUtils';
+import { maskPhone, formatPhoneToE164, removerCodigoPaisBrasil } from '../utils/dateUtils';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, Usuario } from '../types';
 
@@ -90,9 +90,7 @@ export default function PerfilScreen({ navigation }: Props) {
         setNome(data.nome || '');
 
         // Formatar telefone para exibição
-        const digits = (data.telefone || '').replace(/\D/g, '');
-        const local = digits.startsWith('55') ? digits.slice(2) : digits;
-        setTelefone(maskPhone(local));
+        setTelefone(maskPhone(removerCodigoPaisBrasil(data.telefone)));
 
         // Endereço só existe na vitrine do barbeiro (coleção `barbeiros`)
         if (data.tipo === 'barbeiro') {

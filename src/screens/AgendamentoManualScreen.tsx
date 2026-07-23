@@ -38,7 +38,14 @@ import {
   timeToMinutes,
   minutesToTime,
 } from '../utils/agendaSlots';
-import { maskPhone, formatPhoneToE164, formatMoney, toLocalDateString } from '../utils/dateUtils';
+import {
+  maskPhone,
+  formatPhoneToE164,
+  formatPhoneDisplay,
+  removerCodigoPaisBrasil,
+  formatMoney,
+  toLocalDateString,
+} from '../utils/dateUtils';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -125,7 +132,7 @@ export default function AgendamentoManualScreen({ route, navigation }: Props) {
         setModoNovoCliente(true);
         setNovoClienteNome(route.params.clienteNome);
         if (route.params.clienteTelefone) {
-          setNovoClienteTelefone(maskPhone(route.params.clienteTelefone.replace(/^55/, '')));
+          setNovoClienteTelefone(maskPhone(removerCodigoPaisBrasil(route.params.clienteTelefone)));
         }
       }
     } catch (error) {
@@ -313,7 +320,7 @@ export default function AgendamentoManualScreen({ route, navigation }: Props) {
                       <Text style={[s.clienteRowNome, clienteSelecionado?.id === item.id && s.clienteRowNomeSelected]}>
                         {item.nome}
                       </Text>
-                      {item.telefone ? <Text style={s.clienteRowTelefone}>{item.telefone}</Text> : null}
+                      {item.telefone ? <Text style={s.clienteRowTelefone}>{formatPhoneDisplay(item.telefone)}</Text> : null}
                     </TouchableOpacity>
                   )}
                 />

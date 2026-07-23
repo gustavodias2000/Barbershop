@@ -5,6 +5,8 @@ import {
   toLocalDateString,
   maskPhone,
   formatPhoneToE164,
+  removerCodigoPaisBrasil,
+  formatPhoneDisplay,
   maskDiaMes,
   diaMesParaAniversario,
   aniversarioParaExibicao,
@@ -43,6 +45,47 @@ describe('telefone', () => {
   it('formata para E.164 brasileiro (55 + DDD + número)', () => {
     expect(formatPhoneToE164('(11) 99999-9999')).toBe('5511999999999');
     expect(formatPhoneToE164('5511999999999')).toBe('5511999999999');
+  });
+});
+
+describe('removerCodigoPaisBrasil — regressão do bug de DDD 55 confundido com código do país', () => {
+  it('remove o código do país "55" de um E.164 completo (DDD comum)', () => {
+    expect(removerCodigoPaisBrasil('5564999285490')).toBe('64999285490');
+  });
+
+  it('NÃO corta o DDD 55 (Caxias do Sul/RS) quando o número já vem sem código do país', () => {
+    // 11 dígitos = DDD (2) + celular (9), sem código de país — mesmo
+    // começando com "55", esses dois primeiros dígitos são o DDD, não o
+    // Brasil. Cortar aqui apagaria o DDD real do cliente.
+    expect(removerCodigoPaisBrasil('55991234567')).toBe('55991234567');
+  });
+
+  it('remove o código do país mesmo quando o DDD também é 55 (13 dígitos = país + DDD 55 + celular)', () => {
+    expect(removerCodigoPaisBrasil('5555991234567')).toBe('55991234567');
+  });
+
+  it('retorna string vazia para telefone ausente', () => {
+    expect(removerCodigoPaisBrasil(undefined)).toBe('');
+    expect(removerCodigoPaisBrasil(null)).toBe('');
+  });
+});
+
+describe('formatPhoneDisplay', () => {
+  it('formata um E.164 com DDD comum como "+55 (DD) XXXXX-XXXX"', () => {
+    expect(formatPhoneDisplay('5564999285490')).toBe('+55 (64) 99928-5490');
+  });
+
+  it('formata corretamente mesmo quando o DDD é 55', () => {
+    expect(formatPhoneDisplay('5555991234567')).toBe('+55 (55) 99123-4567');
+  });
+
+  it('não inventa um "+55" quando o número já veio sem código do país', () => {
+    expect(formatPhoneDisplay('55991234567')).toBe('(55) 99123-4567');
+  });
+
+  it('retorna string vazia para telefone ausente', () => {
+    expect(formatPhoneDisplay(undefined)).toBe('');
+    expect(formatPhoneDisplay(null)).toBe('');
   });
 });
 

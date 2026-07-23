@@ -109,6 +109,37 @@ export const maskPhone = (value: string): string => {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
+/**
+ * Remove o código do país "55" (Brasil) de um telefone em E.164, quando ele
+ * de fato estiver presente — e só nesse caso.
+ *
+ * Números locais (DDD + número) têm no máximo 11 dígitos (DDD com 2 +
+ * celular com 9). Um "55" no início de uma string de até 11 dígitos é
+ * necessariamente o DDD (existe DDD 55, de Caxias do Sul/RS), nunca o
+ * código do país — só uma string com 12+ dígitos pode ter os dois. Checar
+ * só o prefixo "55" sem o comprimento (como esta função fazia antes)
+ * cortaria o DDD real de um cliente de lá por engano.
+ */
+export const removerCodigoPaisBrasil = (telefone?: string | null): string => {
+  const digits = (telefone || '').replace(/\D/g, '');
+  return digits.startsWith('55') && digits.length > 11 ? digits.slice(2) : digits;
+};
+
+/**
+ * Formata um telefone armazenado (idealmente em E.164, via
+ * `formatPhoneToE164`) para exibição amigável, ex.: "+55 (64) 99285-490".
+ * Usa `removerCodigoPaisBrasil` para nunca confundir o código do país com
+ * um DDD igual a "55".
+ */
+export const formatPhoneDisplay = (telefone?: string | null): string => {
+  if (!telefone) return '';
+  const digits = telefone.replace(/\D/g, '');
+  const local = removerCodigoPaisBrasil(telefone);
+  const tinhaCodigoPais = local.length < digits.length;
+  const mascarado = maskPhone(local);
+  return tinhaCodigoPais ? `+55 ${mascarado}` : mascarado;
+};
+
 // ─── Aniversário (dia/mês, sem ano) ────────────────────────────────────────────
 // Armazenado como "MM-DD" (mês 1-indexado) — mesmo formato usado pelo
 // `Birthday` de `react-native-contacts`. Exibido ao usuário como "DD/MM".
