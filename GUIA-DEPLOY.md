@@ -143,6 +143,15 @@ barbeiro (item competitivo do Gendo). **Totalmente opcional** — sem isso,
 o campo de endereço continua funcionando como texto livre, exatamente
 como antes.
 
+> **Status (23/07/2026): pausado.** A criação da conta de faturamento do
+> Google Cloud (necessária pra ativar a Places API) está falhando com o
+> erro `OR_BACR2_44` — é um bug conhecido do lado do Google (não é nada
+> errado na configuração), sem previsão de quando resolve. Ficou pendente:
+> vincular a conta de faturamento já criada ("Minha conta de faturamento",
+> código `01D9A1-C2085E-04C2BA`) ao projeto `barbershop-a754d`. Tentar de
+> novo depois em outro navegador (Firefox/Edge) ou aguardar alguns dias.
+> O resto do app funciona 100% sem isso.
+
 1. No [Google Cloud Console](https://console.cloud.google.com/), selecione
    o mesmo projeto do Firebase (**barbershop-a754d**).
 2. Ative a **Places API** (legada): menu **APIs e Serviços** → **Biblioteca**
