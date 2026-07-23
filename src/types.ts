@@ -29,6 +29,8 @@ export interface ConfiguracaoAgenda {
   antecedenciaMinutos: number;  // 0 = sem restrição, 30 = mínimo 30min de antecedência
   antecedenciaMaximaDias: number; // 7 a 120 dias à frente; 0 = sem limite
   diasAtendimento: number[];    // 0=dom, 1=seg, ..., 6=sab; ex.: [1,2,3,4,5,6]
+  /** Intervalo de descanso/limpeza após cada atendimento (minutos). 0 = sem buffer. */
+  intervaloAposAtendimentoMinutos?: number;
 }
 
 // ─── Templates de mensagem WhatsApp ──────────────────────────────────────────
@@ -101,6 +103,10 @@ export interface Barbeiro {
   clientesBanidos?: ClienteBanido[];
   /** Mensagem exibida ao cliente após confirmar o agendamento */
   mensagemPosAgendamento?: string;
+  /** Endereço do estabelecimento (exibido na confirmação e usado no link do mapa) */
+  endereco?: string;
+  /** Datas em que o barbeiro não atende (formato YYYY-MM-DD) — folgas, férias, feriados */
+  datasBloqueadas?: DataISO[];
   createdAt?: FirestoreDate;
   updatedAt?: FirestoreDate;
 }
@@ -191,11 +197,18 @@ export type RootStackParamList = {
   Cliente: undefined;
   Barbeiro: undefined;
   Agendamento: { barbeiro: Barbeiro };
+  AgendamentoConfirmado: {
+    agendamento: NovoAgendamento & { id?: string };
+    barbeiro: Barbeiro;
+    whatsappEnviado: boolean;
+    mensagemPosAgendamento?: string | null;
+  };
   Historico: undefined;
   Perfil: undefined;
   Privacidade: undefined;
   // Telas de configuração do barbeiro
   ConfigAgenda: undefined;
+  Folgas: undefined;
   ConfigServicos: undefined;
   TemplatesMensagem: undefined;
   ClientesBanidos: undefined;

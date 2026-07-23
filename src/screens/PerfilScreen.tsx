@@ -24,7 +24,7 @@ import {
   updateProfile,
   deleteProfile,
 } from '../data/repositories/UsuarioRepository';
-import { upsertBarbeiro, removerBarbeiro } from '../data/repositories/BarbeiroRepository';
+import { upsertBarbeiro, removerBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import ThemeSelector from '../components/ThemeSelector';
 import { maskPhone, formatPhoneToE164 } from '../utils/dateUtils';
@@ -43,6 +43,7 @@ export default function PerfilScreen({ navigation }: Props) {
   const [userData, setUserData] = useState<Usuario | null>(null);
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [endereco, setEndereco] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -78,6 +79,12 @@ export default function PerfilScreen({ navigation }: Props) {
         const digits = (data.telefone || '').replace(/\D/g, '');
         const local = digits.startsWith('55') ? digits.slice(2) : digits;
         setTelefone(maskPhone(local));
+
+        // Endereço só existe na vitrine do barbeiro (coleção `barbeiros`)
+        if (data.tipo === 'barbeiro') {
+          const barbeiroDoc = await getBarbeiro(uid);
+          setEndereco(barbeiroDoc?.endereco || '');
+        }
       }
     } catch (error) {
       console.error('Erro ao buscar perfil:', error);
@@ -120,6 +127,7 @@ export default function PerfilScreen({ navigation }: Props) {
         await upsertBarbeiro(uid, {
           nome: nome.trim(),
           telefone: telefoneE164,
+          endereco: endereco.trim() || undefined,
         });
       }
 
@@ -374,6 +382,28 @@ export default function PerfilScreen({ navigation }: Props) {
             {errors.telefone ? <Text style={styles.errorText}>{errors.telefone}</Text> : null}
           </View>
 
+          {userData?.tipo === 'barbeiro' && (
+            <View style={styles.inputContainer}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>
+                Endereço do estabelecimento
+              </Text>
+              <TextInput
+                value={endereco}
+                onChangeText={setEndereco}
+                style={[
+                  styles.input,
+                  { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border },
+                ]}
+                placeholder="Rua, número, bairro, cidade"
+                placeholderTextColor={theme.colors.textSecondary}
+                autoCapitalize="sentences"
+              />
+              <Text style={[styles.hintSmall, { color: theme.colors.textSecondary }]}>
+                Exibido aos clientes na confirmação do agendamento, com link para o mapa.
+              </Text>
+            </View>
+          )}
+
           <TouchableOpacity
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
             onPress={handleSaveProfile}
@@ -627,6 +657,11 @@ const styles = StyleSheet.create({
     color: '#e74c3c',
     fontSize: 13,
     marginTop: 4,
+  },
+  hintSmall: {
+    fontSize: 12,
+    marginTop: 6,
+    lineHeight: 16,
   },
   saveButton: {
     backgroundColor: '#3498db',

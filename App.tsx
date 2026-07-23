@@ -12,10 +12,12 @@ import ClienteTabs from './src/navigation/ClienteTabs';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import AgendamentoScreen from './src/screens/AgendamentoScreen';
+import AgendamentoConfirmadoScreen from './src/screens/AgendamentoConfirmadoScreen';
 import HistoricoScreen from './src/screens/HistoricoScreen';
 import PerfilScreen from './src/screens/PerfilScreen';
 import PrivacidadeScreen from './src/screens/PrivacidadeScreen';
 import ConfigAgendaScreen from './src/screens/ConfigAgendaScreen';
+import FolgasScreen from './src/screens/FolgasScreen';
 import ConfigServicosScreen from './src/screens/ConfigServicosScreen';
 import TemplatesMensagemScreen from './src/screens/TemplatesMensagemScreen';
 import ClientesBanidosScreen from './src/screens/ClientesBanidosScreen';
@@ -72,6 +74,11 @@ export default function App() {
             options={{ title: 'Novo Agendamento' }}
           />
           <Stack.Screen
+            name="AgendamentoConfirmado"
+            component={AgendamentoConfirmadoScreen}
+            options={{ title: 'Agendamento', headerBackVisible: false }}
+          />
+          <Stack.Screen
             name="Historico"
             component={HistoricoScreen}
             options={{ title: 'Histórico' }}
@@ -101,6 +108,11 @@ export default function App() {
             name="ConfigAgenda"
             component={ConfigAgendaScreen}
             options={{ title: 'Horário de Atendimento' }}
+          />
+          <Stack.Screen
+            name="Folgas"
+            component={FolgasScreen}
+            options={{ title: 'Dias de Folga' }}
           />
           <Stack.Screen
             name="ConfigServicos"

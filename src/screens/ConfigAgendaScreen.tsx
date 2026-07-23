@@ -43,6 +43,15 @@ const ANTECEDENCIAS = [
   { label: '24 horas antes', value: 1440 },
 ];
 
+const BUFFERS = [
+  { label: 'Sem intervalo', value: 0 },
+  { label: '5 min', value: 5 },
+  { label: '10 min', value: 10 },
+  { label: '15 min', value: 15 },
+  { label: '20 min', value: 20 },
+  { label: '30 min', value: 30 },
+];
+
 const PERIODO_MAXIMO = [
   { label: '7 dias', value: 7 },
   { label: '15 dias', value: 15 },
@@ -71,6 +80,7 @@ const DEFAULT_CONFIG: ConfiguracaoAgenda = {
   antecedenciaMinutos: 30,
   antecedenciaMaximaDias: 30,
   diasAtendimento: [1, 2, 3, 4, 5, 6],
+  intervaloAposAtendimentoMinutos: 0,
 };
 
 export default function ConfigAgendaScreen({ navigation }: Props) {
@@ -93,7 +103,7 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
       if (!uid) return;
       const barbeiro = await getBarbeiro(uid);
       if (barbeiro?.configuracaoAgenda) {
-        const c = barbeiro.configuracaoAgenda;
+        const c = { ...DEFAULT_CONFIG, ...barbeiro.configuracaoAgenda };
         setConfig(c);
         setAlmoco(!!c.almocoInicio && !!c.almocoFim);
       }
@@ -310,6 +320,53 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
           </ScrollView>
         </View>
 
+        {/* Intervalo entre atendimentos (buffer) */}
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Intervalo Entre Atendimentos</Text>
+          <Text style={s.hint}>
+            Tempo de descanso/limpeza reservado automaticamente depois de cada
+            atendimento, antes do próximo horário ficar disponível.
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipScroll}>
+            {BUFFERS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[
+                  s.chip,
+                  (config.intervaloAposAtendimentoMinutos ?? 0) === opt.value && s.chipSelected,
+                ]}
+                onPress={() =>
+                  setConfig((p) => ({ ...p, intervaloAposAtendimentoMinutos: opt.value }))
+                }
+              >
+                <Text
+                  style={[
+                    s.chipText,
+                    (config.intervaloAposAtendimentoMinutos ?? 0) === opt.value && s.chipTextSelected,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Dias de folga */}
+        <TouchableOpacity
+          style={s.folgasLink}
+          onPress={() => navigation.navigate('Folgas')}
+          accessibilityRole="button"
+          accessibilityLabel="Gerenciar dias de folga"
+        >
+          <Text style={s.folgasLinkIcon}>🗓️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.folgasLinkTitle}>Dias de Folga</Text>
+            <Text style={s.folgasLinkDesc}>Bloqueie datas específicas (férias, feriados, imprevistos)</Text>
+          </View>
+          <Text style={s.chevron}>›</Text>
+        </TouchableOpacity>
+
         {/* Período máximo */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Período Máximo para Agendar</Text>
@@ -519,5 +576,38 @@ const getStyles = (theme: Theme) =>
       color: '#fff',
       fontSize: 16,
       fontWeight: '700',
+    },
+    folgasLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    folgasLinkIcon: {
+      fontSize: 22,
+      marginRight: 14,
+    },
+    folgasLinkTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.colors.text,
+      marginBottom: 2,
+    },
+    folgasLinkDesc: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 17,
+    },
+    chevron: {
+      fontSize: 22,
+      color: theme.colors.textMuted,
+      marginLeft: 8,
     },
   });

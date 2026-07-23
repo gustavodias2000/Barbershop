@@ -21,7 +21,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import WhatsAppService from '../services/WhatsAppService';
 import PaymentModal from '../components/PaymentModal';
-import CalendarService from '../services/CalendarService';
 import { getHorariosOcupados, marcarOcupado } from '../services/OcupacaoService';
 import { criarAgendamento } from '../data/repositories/AgendamentoRepository';
 import { getBarbeiro } from '../data/repositories/BarbeiroRepository';
@@ -54,12 +53,14 @@ function minutesToTime(minutes: number): string {
 
 /**
  * Gera os slots disponíveis com base na configuração do barbeiro e duração do serviço.
- * Pula horários que conflitem com o intervalo de almoço.
+ * Pula horários que conflitem com o intervalo de almoço. Após cada slot, reserva o
+ * intervalo de descanso/limpeza configurado (buffer) antes de liberar o próximo horário.
  */
 function gerarSlots(config: ConfiguracaoAgenda, duracaoMinutos: number): string[] {
   const slots: string[] = [];
   let current = timeToMinutes(config.horaInicio);
   const end = timeToMinutes(config.horaFim);
+  const buffer = config.intervaloAposAtendimentoMinutos || 0;
 
   const almocoInicio =
     config.almocoInicio ? timeToMinutes(config.almocoInicio) : null;
@@ -76,19 +77,24 @@ function gerarSlots(config: ConfiguracaoAgenda, duracaoMinutos: number): string[
       }
     }
     slots.push(minutesToTime(current));
-    current += duracaoMinutos;
+    current += duracaoMinutos + buffer;
   }
   return slots;
 }
 
 /**
  * Retorna os próximos N dias que estão dentro do período permitido
- * (antecedenciaMaximaDias) e nos dias de atendimento configurados.
+ * (antecedenciaMaximaDias) e nos dias de atendimento configurados,
+ * excluindo datas marcadas como folga pelo barbeiro.
  */
-function getDatesDisponiveis(config: ConfiguracaoAgenda): Array<{ date: string; display: string }> {
+function getDatesDisponiveis(
+  config: ConfiguracaoAgenda,
+  datasBloqueadas: string[] = [],
+): Array<{ date: string; display: string }> {
   const result: Array<{ date: string; display: string }> = [];
   const hoje = new Date();
   const maxDias = config.antecedenciaMaximaDias || 30;
+  const bloqueadas = new Set(datasBloqueadas);
 
   for (let i = 0; i <= maxDias; i++) {
     const d = new Date(hoje);
@@ -97,6 +103,8 @@ function getDatesDisponiveis(config: ConfiguracaoAgenda): Array<{ date: string; 
     if (!config.diasAtendimento.includes(diaSemana)) continue;
 
     const dateStr = toLocalDateString(d);
+    if (bloqueadas.has(dateStr)) continue;
+
     const display = d.toLocaleDateString('pt-BR', {
       weekday: 'short',
       day: '2-digit',
@@ -138,7 +146,7 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [loadingHorarios, setLoadingHorarios] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [createdAgendamento, setCreatedAgendamento] = useState<NovoAgendamento | null>(null);
+  const [createdAgendamento, setCreatedAgendamento] = useState<(NovoAgendamento & { id?: string }) | null>(null);
   const [waitlistJoined, setWaitlistJoined] = useState(false);
   const [mensagemPosAgendamento, setMensagemPosAgendamento] = useState<string | null>(null);
 
@@ -174,7 +182,7 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
 
       setMensagemPosAgendamento(dados?.mensagemPosAgendamento ?? null);
 
-      const dates = getDatesDisponiveis(cfg);
+      const dates = getDatesDisponiveis(cfg, dados?.datasBloqueadas ?? []);
       setDatesDisponiveis(dates);
       if (dates.length > 0) setSelectedDate(dates[0].date);
     } catch (error) {
@@ -324,15 +332,18 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
         precoEmCentavos: servicoSelecionado.precoEmCentavos,
       };
 
-      await criarAgendamento(novoAgendamento);
+      const novoId = await criarAgendamento(novoAgendamento);
 
-      // Marca todos os sub-slots de 30 min cobertos pelo serviço como ocupados
+      // Marca todos os sub-slots de 30 min cobertos pelo serviço (+ buffer de
+      // descanso/limpeza pós-atendimento) como ocupados
       const slotMin = timeToMinutes(selectedTime);
-      for (let i = 0; i < servicoSelecionado.duracaoMinutos; i += 30) {
+      const duracaoComBuffer =
+        servicoSelecionado.duracaoMinutos + (config.intervaloAposAtendimentoMinutos || 0);
+      for (let i = 0; i < duracaoComBuffer; i += 30) {
         await marcarOcupado(barbeiro.id, selectedDate, minutesToTime(slotMin + i));
       }
 
-      setCreatedAgendamento(novoAgendamento);
+      setCreatedAgendamento({ ...novoAgendamento, id: novoId } as NovoAgendamento & { id: string });
       setShowPaymentModal(true);
     } catch (error) {
       console.error('Erro ao agendar:', error);
@@ -343,50 +354,41 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
   };
 
   const handlePaymentSuccess = async () => {
-    try {
-      if (!createdAgendamento) return;
+    if (!createdAgendamento) return;
+    const agendamentoFeito = createdAgendamento;
 
+    try {
       const clienteInfo = {
-        nome: createdAgendamento.clienteNome,
+        nome: agendamentoFeito.clienteNome,
         email: auth.currentUser?.email ?? undefined,
       };
 
       const mensagem = WhatsAppService.gerarMensagemAgendamento(
-        { ...barbeiro, telefone: createdAgendamento.barbeiroTelefone },
+        { ...barbeiro, telefone: agendamentoFeito.barbeiroTelefone },
         clienteInfo,
-        createdAgendamento.data,
-        createdAgendamento.horario,
+        agendamentoFeito.data,
+        agendamentoFeito.horario,
       );
 
-      const barbeiroPhone = createdAgendamento.barbeiroTelefone;
+      const barbeiroPhone = agendamentoFeito.barbeiroTelefone;
       const whatsappEnviado = barbeiroPhone
         ? await WhatsAppService.sendTextMessage(barbeiroPhone, mensagem)
         : false;
 
-      const extraMsg = mensagemPosAgendamento ? `\n\n${mensagemPosAgendamento}` : '';
-      Alert.alert(
-        whatsappEnviado ? 'Sucesso!' : 'Agendamento Pago',
-        (whatsappEnviado
-          ? 'Agendamento pago e confirmado! Mensagem enviada via WhatsApp.'
-          : 'Agendamento pago com sucesso! Entre em contato para confirmar.') + extraMsg,
-        [
-          { text: 'OK', onPress: () => navigation.goBack() },
-          {
-            text: 'Adicionar ao Calendário',
-            onPress: async () => {
-              await CalendarService.addAgendamentoToCalendar(createdAgendamento);
-              navigation.goBack();
-            },
-          },
-        ],
-      );
+      navigation.replace('AgendamentoConfirmado', {
+        agendamento: agendamentoFeito,
+        barbeiro,
+        whatsappEnviado,
+        mensagemPosAgendamento,
+      });
     } catch (error) {
       console.error('Erro pós-pagamento:', error);
-      Alert.alert(
-        'Pagamento realizado',
-        'Agendamento pago, mas houve um erro ao enviar a mensagem.',
-      );
-      navigation.goBack();
+      navigation.replace('AgendamentoConfirmado', {
+        agendamento: agendamentoFeito,
+        barbeiro,
+        whatsappEnviado: false,
+        mensagemPosAgendamento,
+      });
     }
   };
 
