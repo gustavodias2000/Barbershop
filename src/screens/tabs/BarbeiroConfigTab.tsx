@@ -1,6 +1,7 @@
 /**
  * BarbeiroConfigTab — aba de configurações do barbeiro.
- * Lista todos os itens administrativos com navegação clara.
+ * Lista todos os itens administrativos agrupados por tema, em cards
+ * limpos com ícone colorido — inspirado no layout de Configurações do Masters.
  */
 import React from 'react';
 import {
@@ -23,88 +24,103 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
-const ITENS = [
-  {
-    icon: '📅',
-    label: 'Horário de Atendimento',
-    desc: 'Configure dias, horários e intervalo de almoço',
-    route: 'ConfigAgenda' as keyof RootStackParamList,
-    destaque: true,
-  },
-  {
-    icon: '✂️',
-    label: 'Meus Serviços',
-    desc: 'Cadastre serviços com duração e preço',
-    route: 'ConfigServicos' as keyof RootStackParamList,
-    destaque: true,
-  },
-  {
-    icon: '👥',
-    label: 'Clientes',
-    desc: 'Importe contatos ou cadastre clientes manualmente',
-    route: 'Clientes' as keyof RootStackParamList,
-    destaque: false,
-  },
-  {
-    icon: '💬',
-    label: 'Templates WhatsApp',
-    desc: 'Personalize mensagens de agendamento',
-    route: 'TemplatesMensagem' as keyof RootStackParamList,
-    destaque: false,
-  },
-  {
-    icon: '🚫',
-    label: 'Clientes Banidos',
-    desc: 'Gerencie clientes que não podem agendar',
-    route: 'ClientesBanidos' as keyof RootStackParamList,
-    destaque: false,
-  },
-  {
-    icon: '⏳',
-    label: 'Lista de Espera',
-    desc: 'Veja clientes aguardando horário disponível',
-    route: 'ListaEspera' as keyof RootStackParamList,
-    destaque: false,
-  },
-  {
-    icon: '🔄',
-    label: 'Recorrências',
-    desc: 'Gerencie agendamentos periódicos de clientes fiéis',
-    route: 'Recorrencias' as keyof RootStackParamList,
-    destaque: false,
-  },
-  {
-    icon: '🔲',
-    label: 'QR Code',
-    desc: 'Exiba o QR Code para clientes agendarem',
-    route: 'QRCode' as keyof RootStackParamList,
-    destaque: false,
-  },
-  {
-    icon: '❓',
-    label: 'Ajuda e Suporte',
-    desc: 'FAQ e contato com o suporte Barbershop',
-    route: 'Suporte' as keyof RootStackParamList,
-    destaque: false,
-  },
+interface ItemConfig {
+  icon: string;
+  label: string;
+  desc: string;
+  route: keyof RootStackParamList;
+  cor: string;
+}
+
+// Grupos temáticos, do mais essencial para o mais avançado — sem rótulos de
+// seção, para manter o visual limpo (cards + espaçamento fazem a separação).
+const GRUPOS: ItemConfig[][] = [
+  [
+    {
+      icon: '✂️',
+      label: 'Meus Serviços',
+      desc: 'Cadastre serviços com duração e preço',
+      route: 'ConfigServicos',
+      cor: '#FFB020',
+    },
+    {
+      icon: '📅',
+      label: 'Horário de Atendimento',
+      desc: 'Configure dias, horários e intervalo de almoço',
+      route: 'ConfigAgenda',
+      cor: '#2F80ED',
+    },
+  ],
+  [
+    {
+      icon: '💬',
+      label: 'Templates WhatsApp',
+      desc: 'Personalize mensagens de agendamento',
+      route: 'TemplatesMensagem',
+      cor: '#25D366',
+    },
+    {
+      icon: '🔄',
+      label: 'Recorrências',
+      desc: 'Gerencie agendamentos periódicos de clientes fiéis',
+      route: 'Recorrencias',
+      cor: '#9B59F6',
+    },
+    {
+      icon: '🔲',
+      label: 'QR Code',
+      desc: 'Exiba o QR Code para clientes agendarem',
+      route: 'QRCode',
+      cor: '#FF5C8A',
+    },
+  ],
+  [
+    {
+      icon: '👥',
+      label: 'Clientes',
+      desc: 'Importe contatos ou cadastre clientes manualmente',
+      route: 'Clientes',
+      cor: '#2F80ED',
+    },
+    {
+      icon: '⏳',
+      label: 'Lista de Espera',
+      desc: 'Veja clientes aguardando horário disponível',
+      route: 'ListaEspera',
+      cor: '#17C3B2',
+    },
+    {
+      icon: '🚫',
+      label: 'Clientes Banidos',
+      desc: 'Gerencie clientes que não podem agendar',
+      route: 'ClientesBanidos',
+      cor: '#F0507A',
+    },
+  ],
+  [
+    {
+      icon: '❓',
+      label: 'Ajuda e Suporte',
+      desc: 'FAQ e contato com o suporte Barbershop',
+      route: 'Suporte',
+      cor: '#8A8F98',
+    },
+  ],
 ];
 
 export default function BarbeiroConfigTab({ navigation }: Props) {
   const { theme } = useTheme();
   const s = getStyles(theme);
 
-  const principal = ITENS.filter((i) => i.destaque);
-  const outros = ITENS.filter((i) => !i.destaque);
-
-  const renderItem = (item: typeof ITENS[0]) => (
+  const renderItem = (item: ItemConfig, isLast: boolean) => (
     <TouchableOpacity
       key={item.route}
-      style={s.item}
+      style={[s.item, isLast && s.itemLast]}
       onPress={() => navigation.navigate(item.route as any)}
       accessibilityRole="button"
       accessibilityLabel={item.label}
     >
-      <View style={s.itemIconContainer}>
+      <View style={[s.itemIconContainer, { backgroundColor: item.cor }]}>
         <Text style={s.itemIcon}>{item.icon}</Text>
       </View>
       <View style={s.itemText}>
@@ -119,24 +135,14 @@ export default function BarbeiroConfigTab({ navigation }: Props) {
     <SafeAreaView style={s.container} edges={['top']}>
       <View style={s.header}>
         <Text style={s.title}>Configurações</Text>
-        <Text style={s.subtitle}>Gerencie seu perfil administrativo</Text>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-
-        <Text style={s.sectionLabel}>ESSENCIAL — Configure primeiro</Text>
-        <View style={s.group}>
-          {principal.map(renderItem)}
-        </View>
-        <Text style={s.sectionHint}>
-          ⚠️ Sem horários e serviços cadastrados, seus clientes não conseguem agendar.
-        </Text>
-
-        <Text style={[s.sectionLabel, { marginTop: 24 }]}>AVANÇADO</Text>
-        <View style={s.group}>
-          {outros.map(renderItem)}
-        </View>
-
+        {GRUPOS.map((grupo, gi) => (
+          <View key={gi} style={s.group}>
+            {grupo.map((item, ii) => renderItem(item, ii === grupo.length - 1))}
+          </View>
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -149,47 +155,23 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: theme.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: '800',
     color: theme.colors.text,
   },
-  subtitle: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
   scroll: {
-    padding: 16,
+    paddingHorizontal: 16,
     paddingBottom: 32,
   },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.primary,
-    letterSpacing: 1,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  sectionHint: {
-    fontSize: 12,
-    color: theme.colors.warning,
-    marginTop: 8,
-    marginLeft: 4,
-    lineHeight: 18,
-  },
   group: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
+    marginBottom: 20,
   },
   item: {
     flexDirection: 'row',
@@ -199,31 +181,33 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
   },
+  itemLast: {
+    borderBottomWidth: 0,
+  },
   itemIconContainer: {
     width: 40,
     height: 40,
-    borderRadius: 10,
-    backgroundColor: theme.colors.surfaceVariant,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
   },
   itemIcon: {
-    fontSize: 20,
+    fontSize: 19,
   },
   itemText: {
     flex: 1,
   },
   itemLabel: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '600',
     color: theme.colors.text,
-    marginBottom: 2,
   },
   itemDesc: {
     fontSize: 12,
     color: theme.colors.textSecondary,
     lineHeight: 17,
+    marginTop: 2,
   },
   chevron: {
     fontSize: 22,
