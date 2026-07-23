@@ -10,6 +10,7 @@ const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
+const nodemailer = require('nodemailer');
 
 admin.initializeApp();
 
@@ -17,6 +18,13 @@ admin.initializeApp();
 const WHATSAPP_TOKEN = defineSecret('WHATSAPP_TOKEN');
 const WHATSAPP_PHONE_ID = defineSecret('WHATSAPP_PHONE_ID');
 const GOOGLE_PLACES_API_KEY = defineSecret('GOOGLE_PLACES_API_KEY');
+// SMS (fallback quando o WhatsApp não pôde ser entregue) via Twilio.
+const TWILIO_ACCOUNT_SID = defineSecret('TWILIO_ACCOUNT_SID');
+const TWILIO_AUTH_TOKEN = defineSecret('TWILIO_AUTH_TOKEN');
+const TWILIO_FROM_NUMBER = defineSecret('TWILIO_FROM_NUMBER');
+// Relatório semanal por email, via SMTP do Gmail (senha de app).
+const EMAIL_USER = defineSecret('EMAIL_USER');
+const EMAIL_PASS = defineSecret('EMAIL_PASS');
 
 const API_VERSION = 'v21.0';
 
@@ -56,6 +64,46 @@ async function sendWhatsAppRaw(token, phoneId, to, message) {
       return { success: false, error: result };
     }
     return { success: true, id: result?.messages?.[0]?.id || null };
+  } catch (error) {
+    return { success: false, error: error?.message || String(error) };
+  }
+}
+
+/**
+ * Envio de SMS via Twilio — usado como FALLBACK dos lembretes quando o
+ * WhatsApp não pôde ser entregue (token não configurado, número sem
+ * WhatsApp, falha da API). Não é enviado em paralelo ao WhatsApp: evita
+ * mandar duas notificações da mesma coisa para o mesmo cliente.
+ *
+ * RCS não foi implementado: exigiria um agente aprovado no Google RCS
+ * Business Messaging + acordos com operadoras, fora do alcance de um app
+ * único. Telegram também não foi implementado: exigiria que o cliente
+ * iniciasse a conversa com o bot primeiro (Telegram não permite push por
+ * número de telefone), o que quebraria o fluxo atual — o barbeiro cadastra
+ * o cliente só com nome/telefone, sem nenhuma etapa de "vincular Telegram".
+ */
+async function sendSmsRaw(accountSid, authToken, from, to, message) {
+  const digits = String(to || '').replace(/\D/g, '');
+  const toE164 = digits.startsWith('55') ? `+${digits}` : `+55${digits}`;
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const body = new URLSearchParams({ To: toE164, From: from, Body: String(message) });
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    });
+    const result = await resp.json();
+    if (!resp.ok) {
+      return { success: false, error: result };
+    }
+    return { success: true, id: result.sid || null };
   } catch (error) {
     return { success: false, error: error?.message || String(error) };
   }
@@ -210,7 +258,7 @@ exports.lembretesAgendamento = onSchedule(
     schedule: '0 18 * * *',
     timeZone: 'America/Sao_Paulo',
     region: 'us-central1',
-    secrets: [WHATSAPP_TOKEN, WHATSAPP_PHONE_ID],
+    secrets: [WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER],
   },
   async () => {
     const db = admin.firestore();
@@ -229,9 +277,14 @@ exports.lembretesAgendamento = onSchedule(
 
     const token = WHATSAPP_TOKEN.value();
     const phoneId = WHATSAPP_PHONE_ID.value();
+    const twilioSid = TWILIO_ACCOUNT_SID.value();
+    const twilioToken = TWILIO_AUTH_TOKEN.value();
+    const twilioFrom = TWILIO_FROM_NUMBER.value();
+    const smsConfigurado = !!(twilioSid && twilioToken && twilioFrom);
 
     let pushEnviados = 0;
     let whatsappEnviados = 0;
+    let smsEnviados = 0;
 
     for (const docSnap of snap.docs) {
       const ag = docSnap.data();
@@ -262,19 +315,33 @@ exports.lembretesAgendamento = onSchedule(
       }
 
       // WhatsApp (fallback caso o cliente não tenha push habilitado)
+      let whatsappOk = false;
       if (token && phoneId && ag.clienteTelefone) {
         const mensagem = `Olá ${ag.clienteNome || ''}! 👋\n\n🔔 Lembrete: seu agendamento é amanhã!\n\n👨‍💼 Barbeiro: ${ag.barbeiroNome}\n📅 Data: ${ag.data}\n🕐 Horário: ${ag.horario}\n\nTe esperamos! 💪`;
         const result = await sendWhatsAppRaw(token, phoneId, ag.clienteTelefone, mensagem);
         if (result.success) {
           whatsappEnviados++;
+          whatsappOk = true;
         } else {
           logger.warn(`Falha ao notificar (WhatsApp) ${ag.clienteTelefone}`, result.error);
+        }
+      }
+
+      // SMS — só como fallback quando o WhatsApp não foi entregue, para não
+      // duplicar a mesma notificação em dois canais.
+      if (!whatsappOk && smsConfigurado && ag.clienteTelefone) {
+        const mensagemSms = `Barbershop: lembrete do seu agendamento amanha as ${ag.horario} com ${ag.barbeiroNome}.`;
+        const result = await sendSmsRaw(twilioSid, twilioToken, twilioFrom, ag.clienteTelefone, mensagemSms);
+        if (result.success) {
+          smsEnviados++;
+        } else {
+          logger.warn(`Falha ao notificar (SMS) ${ag.clienteTelefone}`, result.error);
         }
       }
     }
 
     logger.info(
-      `Lembretes D-1: push ${pushEnviados}/${snap.size}, WhatsApp ${whatsappEnviados}/${snap.size} para ${amanha}.`,
+      `Lembretes D-1: push ${pushEnviados}/${snap.size}, WhatsApp ${whatsappEnviados}/${snap.size}, SMS ${smsEnviados}/${snap.size} para ${amanha}.`,
     );
   },
 );
@@ -292,7 +359,7 @@ exports.lembretes2Horas = onSchedule(
     schedule: '*/15 * * * *',
     timeZone: 'America/Sao_Paulo',
     region: 'us-central1',
-    secrets: [WHATSAPP_TOKEN, WHATSAPP_PHONE_ID],
+    secrets: [WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER],
   },
   async () => {
     const db = admin.firestore();
@@ -313,9 +380,14 @@ exports.lembretes2Horas = onSchedule(
 
     const token = WHATSAPP_TOKEN.value();
     const phoneId = WHATSAPP_PHONE_ID.value();
+    const twilioSid = TWILIO_ACCOUNT_SID.value();
+    const twilioToken = TWILIO_AUTH_TOKEN.value();
+    const twilioFrom = TWILIO_FROM_NUMBER.value();
+    const smsConfigurado = !!(twilioSid && twilioToken && twilioFrom);
 
     let pushEnviados = 0;
     let whatsappEnviados = 0;
+    let smsEnviados = 0;
 
     for (const docSnap of snap.docs) {
       const ag = docSnap.data();
@@ -330,6 +402,7 @@ exports.lembretes2Horas = onSchedule(
       if (faltamMin < 105 || faltamMin > 135) continue;
 
       let notificou = false;
+      let whatsappOk = false;
 
       if (ag.clienteUid) {
         try {
@@ -358,8 +431,20 @@ exports.lembretes2Horas = onSchedule(
         if (result.success) {
           whatsappEnviados++;
           notificou = true;
+          whatsappOk = true;
         } else {
           logger.warn(`Falha ao notificar (WhatsApp 2h) ${ag.clienteTelefone}`, result.error);
+        }
+      }
+
+      if (!whatsappOk && smsConfigurado && ag.clienteTelefone) {
+        const mensagemSms = `Barbershop: faltam cerca de 2h para seu horario as ${ag.horario} com ${ag.barbeiroNome}.`;
+        const result = await sendSmsRaw(twilioSid, twilioToken, twilioFrom, ag.clienteTelefone, mensagemSms);
+        if (result.success) {
+          smsEnviados++;
+          notificou = true;
+        } else {
+          logger.warn(`Falha ao notificar (SMS 2h) ${ag.clienteTelefone}`, result.error);
         }
       }
 
@@ -368,8 +453,118 @@ exports.lembretes2Horas = onSchedule(
       }
     }
 
-    if (pushEnviados || whatsappEnviados) {
-      logger.info(`Lembretes H-2: push ${pushEnviados}, WhatsApp ${whatsappEnviados} para ${hoje}.`);
+    if (pushEnviados || whatsappEnviados || smsEnviados) {
+      logger.info(`Lembretes H-2: push ${pushEnviados}, WhatsApp ${whatsappEnviados}, SMS ${smsEnviados} para ${hoje}.`);
     }
+  },
+);
+
+/**
+ * relatorioSemanalEmail — envia todo segunda-feira, às 8h (horário de
+ * Brasília), um resumo dos últimos 7 dias por email a cada barbeiro com
+ * login próprio (profissionais de equipe sem conta — Opção A — não têm
+ * email cadastrado e são pulados). Usa SMTP do Gmail (secrets EMAIL_USER =
+ * endereço, EMAIL_PASS = senha de app, NÃO a senha normal da conta).
+ *
+ * Só envia para quem teve pelo menos um agendamento (concluído ou
+ * cancelado) na semana — evita mandar relatório vazio toda semana.
+ */
+exports.relatorioSemanalEmail = onSchedule(
+  {
+    schedule: '0 8 * * 1',
+    timeZone: 'America/Sao_Paulo',
+    region: 'us-central1',
+    secrets: [EMAIL_USER, EMAIL_PASS],
+  },
+  async () => {
+    const db = admin.firestore();
+    const emailUser = EMAIL_USER.value();
+    const emailPass = EMAIL_PASS.value();
+
+    if (!emailUser || !emailPass) {
+      logger.info('Relatório semanal: EMAIL_USER/EMAIL_PASS não configurados, pulando.');
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: emailUser, pass: emailPass },
+    });
+
+    const hoje = dataSaoPaulo(0);
+    const seteDiasAtras = dataSaoPaulo(-7);
+
+    const barbeirosSnap = await db.collection('barbeiros').get();
+    let relatoriosEnviados = 0;
+
+    for (const barbeiroDoc of barbeirosSnap.docs) {
+      const barbeiroId = barbeiroDoc.id;
+      const barbeiro = barbeiroDoc.data();
+
+      // Profissionais de equipe sem login próprio (Opção A) não têm doc em
+      // `usuarios` nem email — nada a enviar.
+      const usuarioSnap = await db.collection('usuarios').doc(barbeiroId).get();
+      if (!usuarioSnap.exists) continue;
+      const email = usuarioSnap.data().email;
+      if (!email) continue;
+
+      const agSnap = await db
+        .collection('agendamentos')
+        .where('barbeiroId', '==', barbeiroId)
+        .where('data', '>=', seteDiasAtras)
+        .where('data', '<=', hoje)
+        .get();
+
+      let concluidos = 0;
+      let cancelados = 0;
+      let faturamentoCentavos = 0;
+      const clientesUnicos = new Set();
+
+      agSnap.docs.forEach((d) => {
+        const ag = d.data();
+        if (ag.status === 'concluido') {
+          concluidos++;
+          faturamentoCentavos += ag.precoEmCentavos || 0;
+          if (ag.clienteNome) clientesUnicos.add(ag.clienteNome);
+        }
+        if (ag.status === 'cancelado') cancelados++;
+      });
+
+      if (concluidos === 0 && cancelados === 0) continue; // nada a reportar essa semana
+
+      const faturamento = (faturamentoCentavos / 100).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      });
+
+      const nomeBarbeiro = barbeiro.nome || 'Barbeiro';
+      const html = `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2 style="color:#0F1923;">💈 Seu relatório semanal</h2>
+          <p>Olá, ${nomeBarbeiro}! Aqui está o resumo dos últimos 7 dias (${seteDiasAtras} a ${hoje}):</p>
+          <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
+            <tr><td style="padding:8px 0; color:#555;">✅ Atendimentos concluídos</td><td style="text-align:right; font-weight:bold;">${concluidos}</td></tr>
+            <tr><td style="padding:8px 0; color:#555;">❌ Cancelamentos</td><td style="text-align:right; font-weight:bold;">${cancelados}</td></tr>
+            <tr><td style="padding:8px 0; color:#555;">👥 Clientes atendidos</td><td style="text-align:right; font-weight:bold;">${clientesUnicos.size}</td></tr>
+            <tr><td style="padding:8px 0; color:#555;">💰 Faturamento</td><td style="text-align:right; font-weight:bold; color:#16A34A;">${faturamento}</td></tr>
+          </table>
+          <p style="color:#888; font-size:12px;">Relatório automático do Barbershop. Continue acompanhando sua agenda pelo app.</p>
+        </div>
+      `;
+
+      try {
+        await transporter.sendMail({
+          from: `Barbershop <${emailUser}>`,
+          to: email,
+          subject: `📊 Seu relatório semanal — ${nomeBarbeiro}`,
+          html,
+        });
+        relatoriosEnviados++;
+      } catch (error) {
+        logger.warn(`Falha ao enviar relatório semanal para ${email}`, error.message);
+      }
+    }
+
+    logger.info(`Relatório semanal: ${relatoriosEnviados} email(s) enviado(s).`);
   },
 );

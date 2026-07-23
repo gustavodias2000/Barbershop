@@ -440,6 +440,21 @@ export default function ConfigAgendaScreen({ navigation, route }: Props) {
           <Text style={s.chevron}>›</Text>
         </TouchableOpacity>
 
+        {/* Bloqueio de horário específico (evento pessoal) */}
+        <TouchableOpacity
+          style={s.folgasLink}
+          onPress={() => navigation.navigate('Bloqueios', profissionalId ? { profissionalId, profissionalNome } : undefined)}
+          accessibilityRole="button"
+          accessibilityLabel="Bloquear horário específico"
+        >
+          <Text style={s.folgasLinkIcon}>🚧</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.folgasLinkTitle}>Bloquear Horário Específico</Text>
+            <Text style={s.folgasLinkDesc}>Reserve um horário dentro do dia para um compromisso pessoal</Text>
+          </View>
+          <Text style={s.chevron}>›</Text>
+        </TouchableOpacity>
+
         {/* Período máximo */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Período Máximo para Agendar</Text>

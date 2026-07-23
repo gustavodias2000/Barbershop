@@ -18,11 +18,14 @@ import PerfilScreen from './src/screens/PerfilScreen';
 import PrivacidadeScreen from './src/screens/PrivacidadeScreen';
 import ConfigAgendaScreen from './src/screens/ConfigAgendaScreen';
 import FolgasScreen from './src/screens/FolgasScreen';
+import BloqueiosScreen from './src/screens/BloqueiosScreen';
 import ConfigServicosScreen from './src/screens/ConfigServicosScreen';
 import SetupBarbeiroScreen from './src/screens/SetupBarbeiroScreen';
 import ClientesScreen from './src/screens/ClientesScreen';
 import AniversariantesScreen from './src/screens/AniversariantesScreen';
 import PromocaoScreen from './src/screens/PromocaoScreen';
+import BannerPromocionalScreen from './src/screens/BannerPromocionalScreen';
+import AgendamentoManualScreen from './src/screens/AgendamentoManualScreen';
 import TemplatesMensagemScreen from './src/screens/TemplatesMensagemScreen';
 import ClientesBanidosScreen from './src/screens/ClientesBanidosScreen';
 import HistoricoClienteScreen from './src/screens/HistoricoClienteScreen';
@@ -122,6 +125,11 @@ export default function App() {
             options={{ title: 'Dias de Folga' }}
           />
           <Stack.Screen
+            name="Bloqueios"
+            component={BloqueiosScreen}
+            options={{ title: 'Bloquear Horário' }}
+          />
+          <Stack.Screen
             name="ConfigServicos"
             component={ConfigServicosScreen}
             options={{ title: 'Meus Serviços' }}
@@ -145,6 +153,16 @@ export default function App() {
             name="Promocao"
             component={PromocaoScreen}
             options={{ title: 'Promoção' }}
+          />
+          <Stack.Screen
+            name="BannerPromocional"
+            component={BannerPromocionalScreen}
+            options={{ title: 'Banner Promocional' }}
+          />
+          <Stack.Screen
+            name="AgendamentoManual"
+            component={AgendamentoManualScreen}
+            options={{ title: 'Novo Agendamento' }}
           />
           <Stack.Screen
             name="Equipe"

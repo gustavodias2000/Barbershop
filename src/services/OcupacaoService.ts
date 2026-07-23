@@ -46,6 +46,35 @@ export async function getHorariosOcupados(
 }
 
 /**
+ * Retorna os horários ocupados de um barbeiro num intervalo de datas,
+ * agrupados por data — usado pelo calendário colorido (verde = tem
+ * disponibilidade, cinza = lotado) para não precisar de uma query por dia.
+ * Mesmo padrão de "1 equalidade + 1 intervalo, sem orderBy" já usado em
+ * `listarConcluidosPorNegocio` (AgendamentoRepository), que não exige índice
+ * composto adicional.
+ */
+export async function getOcupacoesPorPeriodo(
+  barbeiroId: string,
+  dataInicio: DataISO,
+  dataFim: DataISO,
+): Promise<Record<string, Horario[]>> {
+  const q = query(
+    collection(db, 'ocupacoes'),
+    where('barbeiroId', '==', barbeiroId),
+    where('data', '>=', dataInicio),
+    where('data', '<=', dataFim),
+  );
+  const snap = await getDocs(q);
+  const mapa: Record<string, Horario[]> = {};
+  snap.docs.forEach((d) => {
+    const item = d.data() as { data: DataISO; horario: Horario };
+    if (!mapa[item.data]) mapa[item.data] = [];
+    mapa[item.data].push(item.horario);
+  });
+  return mapa;
+}
+
+/**
  * Marca um horário como ocupado (ao criar um agendamento).
  */
 export async function marcarOcupado(

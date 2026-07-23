@@ -73,6 +73,13 @@ const GRUPOS: ItemConfig[][] = [
       route: 'QRCode',
       cor: '#FF5C8A',
     },
+    {
+      icon: '🏷️',
+      label: 'Banner Promocional',
+      desc: 'Avise sobre promoções na tela de agendamento',
+      route: 'BannerPromocional',
+      cor: '#F59E0B',
+    },
   ],
   [
     {

@@ -27,6 +27,14 @@ import { getBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { entrarNaFila, jaEstaNaFila } from '../data/repositories/ListaEsperaRepository';
 import useUserProfile from '../hooks/useUserProfile';
 import { formatMoney, toLocalDateString } from '../utils/dateUtils';
+import {
+  gerarSlots,
+  getDatesDisponiveis,
+  filtrarBloqueiosHorario,
+  isTimeInPast as isTimeInPastUtil,
+  timeToMinutes,
+  minutesToTime,
+} from '../utils/agendaSlots';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type {
@@ -34,117 +42,10 @@ import type {
   NovoAgendamento,
   ServicoBarbeiro,
   ConfiguracaoAgenda,
+  BloqueioHorario,
 } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Agendamento'>;
-
-// ─── Helpers para geração de slots ──────────────────────────────────────────
-
-function timeToMinutes(time: string): number {
-  const [hh, mm] = time.split(':').map(Number);
-  return hh * 60 + (mm || 0);
-}
-
-function minutesToTime(minutes: number): string {
-  const hh = Math.floor(minutes / 60);
-  const mm = minutes % 60;
-  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-}
-
-/**
- * Gera os slots de um bloco de horário simples (início/fim), respeitando a
- * duração do serviço, o buffer pós-atendimento e um intervalo de pausa
- * opcional (usado para o almoço no bloco principal).
- */
-function gerarSlotsBloco(
-  inicio: string,
-  fim: string,
-  duracaoMinutos: number,
-  buffer: number,
-  pausaInicio: number | null = null,
-  pausaFim: number | null = null,
-): string[] {
-  const slots: string[] = [];
-  let current = timeToMinutes(inicio);
-  const end = timeToMinutes(fim);
-
-  while (current + duracaoMinutos <= end) {
-    // Pula se o slot (ou qualquer parte dele) cai dentro da pausa
-    if (pausaInicio !== null && pausaFim !== null) {
-      const slotFim = current + duracaoMinutos;
-      if (current < pausaFim && slotFim > pausaInicio) {
-        current = pausaFim; // avança para depois da pausa
-        continue;
-      }
-    }
-    slots.push(minutesToTime(current));
-    current += duracaoMinutos + buffer;
-  }
-  return slots;
-}
-
-/**
- * Gera os slots disponíveis com base na configuração do barbeiro e duração do
- * serviço: bloco principal (respeitando o intervalo de almoço) e, se
- * configurado, um segundo bloco — "turno extra" (ex.: período noturno).
- * Após cada slot, reserva o intervalo de descanso/limpeza (buffer) configurado.
- */
-function gerarSlots(config: ConfiguracaoAgenda, duracaoMinutos: number): string[] {
-  const buffer = config.intervaloAposAtendimentoMinutos || 0;
-
-  const almocoInicio = config.almocoInicio ? timeToMinutes(config.almocoInicio) : null;
-  const almocoFim = config.almocoFim ? timeToMinutes(config.almocoFim) : null;
-
-  const slots = gerarSlotsBloco(
-    config.horaInicio,
-    config.horaFim,
-    duracaoMinutos,
-    buffer,
-    almocoInicio,
-    almocoFim,
-  );
-
-  if (config.turnoExtraAtivo && config.turnoExtraInicio && config.turnoExtraFim) {
-    slots.push(
-      ...gerarSlotsBloco(config.turnoExtraInicio, config.turnoExtraFim, duracaoMinutos, buffer),
-    );
-  }
-
-  return slots;
-}
-
-/**
- * Retorna os próximos N dias que estão dentro do período permitido
- * (antecedenciaMaximaDias) e nos dias de atendimento configurados,
- * excluindo datas marcadas como folga pelo barbeiro.
- */
-function getDatesDisponiveis(
-  config: ConfiguracaoAgenda,
-  datasBloqueadas: string[] = [],
-): Array<{ date: string; display: string }> {
-  const result: Array<{ date: string; display: string }> = [];
-  const hoje = new Date();
-  const maxDias = config.antecedenciaMaximaDias || 30;
-  const bloqueadas = new Set(datasBloqueadas);
-
-  for (let i = 0; i <= maxDias; i++) {
-    const d = new Date(hoje);
-    d.setDate(hoje.getDate() + i);
-    const diaSemana = d.getDay(); // 0=dom...6=sab
-    if (!config.diasAtendimento.includes(diaSemana)) continue;
-
-    const dateStr = toLocalDateString(d);
-    if (bloqueadas.has(dateStr)) continue;
-
-    const display = d.toLocaleDateString('pt-BR', {
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-    });
-    result.push({ date: dateStr, display });
-  }
-  return result;
-}
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
@@ -180,6 +81,8 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
   const [createdAgendamento, setCreatedAgendamento] = useState<(NovoAgendamento & { id?: string }) | null>(null);
   const [waitlistJoined, setWaitlistJoined] = useState(false);
   const [mensagemPosAgendamento, setMensagemPosAgendamento] = useState<string | null>(null);
+  const [bloqueiosHorario, setBloqueiosHorario] = useState<BloqueioHorario[]>([]);
+  const [banner, setBanner] = useState<{ texto: string; ativo: boolean } | null>(null);
 
   const todayStr = toLocalDateString(new Date());
 
@@ -212,6 +115,8 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
       if (svcs.length > 0) setServicoSelecionado(svcs[0]);
 
       setMensagemPosAgendamento(dados?.mensagemPosAgendamento ?? null);
+      setBloqueiosHorario(dados?.bloqueiosHorario ?? []);
+      setBanner(dados?.bannerPromocional?.ativo && dados?.bannerPromocional?.texto ? dados.bannerPromocional : null);
 
       const dates = getDatesDisponiveis(cfg, dados?.datasBloqueadas ?? []);
       setDatesDisponiveis(dates);
@@ -242,21 +147,20 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
   /**
    * Verifica se um horário já passou, considerando a antecedência mínima do barbeiro.
    */
-  const isTimeInPast = (horario: string): boolean => {
-    if (selectedDate !== todayStr) return false;
-    const [hh, mm] = horario.split(':').map(Number);
-    const now = new Date();
-    const slotMs = (hh * 60 + mm) * 60 * 1000;
-    const buffer = config.antecedenciaMinutos || 30;
-    const nowMs = (now.getHours() * 60 + now.getMinutes() + buffer) * 60 * 1000;
-    return slotMs <= nowMs;
-  };
+  const isTimeInPast = (horario: string): boolean =>
+    isTimeInPastUtil(horario, selectedDate ?? '', todayStr, config.antecedenciaMinutos);
 
   const fetchHorariosDisponiveis = async () => {
-    if (!servicoSelecionado) return;
+    if (!servicoSelecionado || !selectedDate) return;
     setLoadingHorarios(true);
     try {
-      const todosOsSlots = gerarSlots(config, servicoSelecionado.duracaoMinutos);
+      let todosOsSlots = gerarSlots(config, servicoSelecionado.duracaoMinutos);
+      todosOsSlots = filtrarBloqueiosHorario(
+        todosOsSlots,
+        servicoSelecionado.duracaoMinutos,
+        selectedDate,
+        bloqueiosHorario,
+      );
       const ocupados = await getHorariosOcupados(barbeiro.id, selectedDate);
 
       // Um slot está ocupado se qualquer sub-slot de 30 min dentro dele está bloqueado
@@ -447,6 +351,14 @@ export default function AgendamentoScreen({ route, navigation }: Props) {
           <Text style={s.title}>Agendar com {barbeiro.nome}</Text>
           <Text style={s.subtitle}>{barbeiro.especialidade || 'Barbearia'}</Text>
         </View>
+
+        {/* Banner promocional configurado pelo barbeiro */}
+        {banner && (
+          <View style={s.promoBanner}>
+            <Text style={s.promoBannerIcon}>🏷️</Text>
+            <Text style={s.promoBannerText}>{banner.texto}</Text>
+          </View>
+        )}
 
         {/* Aviso quando barbeiro não tem serviços cadastrados */}
         {servicos.length === 0 && !loading && (
@@ -931,6 +843,27 @@ const getStyles = (theme: Theme) =>
       color: '#fff',
       fontSize: 17,
       fontWeight: 'bold',
+    },
+    // Banner promocional (configurado pelo barbeiro)
+    promoBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.primary,
+      borderRadius: 10,
+      padding: 14,
+      margin: 16,
+      marginBottom: 0,
+    },
+    promoBannerIcon: {
+      fontSize: 18,
+      marginRight: 10,
+    },
+    promoBannerText: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#fff',
+      lineHeight: 19,
     },
     // Banner de aviso quando barbeiro não tem serviços cadastrados
     alertBanner: {

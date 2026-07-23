@@ -110,8 +110,14 @@ service cloud.firestore {
             || resource.data.barbeiroId == request.auth.uid
             || isDonoDoNegocio(resource.data.get('negocioId', null)));
 
+      // Cliente agenda para si mesmo (clienteUid == uid) OU o próprio
+      // barbeiro cria um agendamento manual (walk-in, telefonema) em nome de
+      // um cliente sem conta no app — nesse caso barbeiroId == uid, e o dono
+      // de uma equipe também pode criar em nome de um profissional (negocioId).
       allow create: if isSignedIn()
-        && request.resource.data.clienteUid == request.auth.uid;
+        && (request.resource.data.clienteUid == request.auth.uid
+            || request.resource.data.barbeiroId == request.auth.uid
+            || isDonoDoNegocio(request.resource.data.get('negocioId', null)));
 
       allow update: if isSignedIn()
         && (resource.data.clienteUid == request.auth.uid

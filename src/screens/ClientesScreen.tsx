@@ -341,6 +341,13 @@ export default function ClientesScreen({ navigation }: Props) {
               </View>
             )}
             <TouchableOpacity
+              style={s.agendarButton}
+              onPress={() => navigation.navigate('AgendamentoManual', { clienteId: item.id })}
+              accessibilityLabel={`Agendar horário para ${item.nome}`}
+            >
+              <Text style={s.agendarButtonText}>📅</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={s.deleteButton}
               onPress={() => handleExcluir(item)}
               accessibilityLabel={`Remover ${item.nome}`}
@@ -564,6 +571,15 @@ const getStyles = (theme: Theme) =>
       fontSize: 10,
       color: theme.colors.textSecondary,
       fontWeight: '600',
+    },
+    agendarButton: {
+      width: 36,
+      height: 36,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    agendarButtonText: {
+      fontSize: 16,
     },
     deleteButton: {
       width: 36,

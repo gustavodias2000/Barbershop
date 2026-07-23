@@ -41,6 +41,30 @@ export interface ConfiguracaoAgenda {
   turnoExtraFim?: string;       // "21:00"
 }
 
+// ─── Bloqueio de horário específico ("evento pessoal") ───────────────────────
+
+/**
+ * Bloqueia um intervalo de horário dentro de um dia específico (ex.: consulta
+ * médica das 14h às 15h) — diferente de `datasBloqueadas` (folga o dia
+ * inteiro). Guardado como array denormalizado no doc do Barbeiro, no mesmo
+ * padrão de `datasBloqueadas`.
+ */
+export interface BloqueioHorario {
+  id: string;
+  data: DataISO;       // "2026-07-23"
+  horaInicio: Horario; // "14:00"
+  horaFim: Horario;    // "15:00"
+  motivo?: string;
+}
+
+// ─── Banner promocional ───────────────────────────────────────────────────────
+
+/** Aviso/promoção exibido ao cliente na tela de agendamento deste barbeiro. */
+export interface BannerPromocional {
+  texto: string;
+  ativo: boolean;
+}
+
 // ─── Templates de mensagem WhatsApp ──────────────────────────────────────────
 
 export interface TemplatesMensagem {
@@ -178,6 +202,10 @@ export interface Barbeiro {
   longitude?: number;
   /** Datas em que o barbeiro não atende (formato YYYY-MM-DD) — folgas, férias, feriados */
   datasBloqueadas?: DataISO[];
+  /** Bloqueios de horário específico dentro de um dia (evento pessoal) */
+  bloqueiosHorario?: BloqueioHorario[];
+  /** Banner promocional exibido ao cliente na tela de agendamento */
+  bannerPromocional?: BannerPromocional;
   /**
    * Presente quando este profissional faz parte de uma equipe (negócio).
    * Ausente = profissional solo, comportamento idêntico ao de sempre.
@@ -221,6 +249,8 @@ export interface Agendamento {
   /** Comissão calculada (centavos) quando o agendamento é concluído, se o
    * profissional pertence a uma equipe com comissão configurada. */
   comissaoCentavos?: number;
+  /** 'manual' = criado pelo próprio barbeiro (cliente sem conta no app); ausente/'cliente' = fluxo normal. */
+  origem?: 'cliente' | 'manual';
   rating?: number;
   paymentMethod?: string;
   cancelledBy?: 'cliente' | 'barbeiro';
@@ -305,11 +335,18 @@ export type RootStackParamList = {
   // ausente = usuário logado editando o próprio perfil (comportamento de sempre).
   ConfigAgenda: { profissionalId?: string; profissionalNome?: string } | undefined;
   Folgas: { profissionalId?: string; profissionalNome?: string } | undefined;
+  Bloqueios: { profissionalId?: string; profissionalNome?: string } | undefined;
   ConfigServicos: { profissionalId?: string; profissionalNome?: string } | undefined;
   SetupBarbeiro: undefined;
   Clientes: undefined;
   Aniversariantes: undefined;
   Promocao: undefined;
+  BannerPromocional: undefined;
+  AgendamentoManual: {
+    clienteId?: string;
+    clienteNome?: string;
+    clienteTelefone?: string;
+  } | undefined;
   Equipe: undefined;
   EditarProfissional: { profissionalId?: string } | undefined;
   Comissoes: undefined;

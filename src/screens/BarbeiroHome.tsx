@@ -21,18 +21,31 @@ import {
   atualizarStatus,
 } from '../data/repositories/AgendamentoRepository';
 import { getNegocioPorDono, getMembro } from '../data/repositories/NegocioRepository';
-import { liberarSlot } from '../services/OcupacaoService';
+import { getBarbeiro } from '../data/repositories/BarbeiroRepository';
+import { liberarSlot, getOcupacoesPorPeriodo } from '../services/OcupacaoService';
 import useUserProfile from '../hooks/useUserProfile';
-import { formatDateTime, formatPreco } from '../utils/dateUtils';
+import { formatDateTime, formatPreco, toLocalDateString } from '../utils/dateUtils';
+import { contarSubSlotsDoDia } from '../utils/agendaSlots';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { SkeletonList } from '../components/Skeleton';
+import CalendarioMensal, { type StatusDia } from '../components/CalendarioMensal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ONBOARDING_KEY } from './OnboardingScreen';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { RootStackParamList, Agendamento } from '../types';
+import type { RootStackParamList, Agendamento, ConfiguracaoAgenda } from '../types';
+
+const CONFIG_PADRAO_CALENDARIO: ConfiguracaoAgenda = {
+  horaInicio: '09:00',
+  horaFim: '18:00',
+  almocoInicio: '12:00',
+  almocoFim: '13:00',
+  antecedenciaMinutos: 30,
+  antecedenciaMaximaDias: 30,
+  diasAtendimento: [1, 2, 3, 4, 5, 6],
+};
 
 // Pode ser chamado tanto de um tab navigator quanto do stack diretamente
 type Props = CompositeScreenProps<
@@ -53,10 +66,75 @@ export default function BarbeiroHome({ navigation }: Props) {
   // agenda mostra os agendamentos de TODOS os profissionais do negócio.
   const [negocioId, setNegocioId] = useState<string | null>(null);
 
+  // ─── Calendário com código de cor (verde=livre, cinza=lotado) ────────────
+  const hoje = new Date();
+  const [showCalendario, setShowCalendario] = useState(true);
+  const [calMes, setCalMes] = useState(hoje.getMonth());
+  const [calAno, setCalAno] = useState(hoje.getFullYear());
+  const [diasStatus, setDiasStatus] = useState<Record<string, StatusDia>>({});
+  const [calendarioLoading, setCalendarioLoading] = useState(false);
+  const [dataFiltro, setDataFiltro] = useState<string | null>(null);
+
   useEffect(() => {
     checkOnboarding();
     fetchAgendamentos().finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (showCalendario) carregarCalendario();
+  }, [showCalendario, calMes, calAno]);
+
+  const carregarCalendario = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    setCalendarioLoading(true);
+    try {
+      const dados = await getBarbeiro(uid);
+      const config = dados?.configuracaoAgenda ?? CONFIG_PADRAO_CALENDARIO;
+      const datasBloqueadas = new Set(dados?.datasBloqueadas ?? []);
+      const totalSubSlots = contarSubSlotsDoDia(config);
+
+      const inicioMes = new Date(calAno, calMes, 1);
+      const fimMes = new Date(calAno, calMes + 1, 0);
+      const dataInicio = toLocalDateString(inicioMes);
+      const dataFim = toLocalDateString(fimMes);
+
+      const ocupacoesPorDia = await getOcupacoesPorPeriodo(uid, dataInicio, dataFim);
+
+      const status: Record<string, StatusDia> = {};
+      const totalDias = fimMes.getDate();
+      for (let dia = 1; dia <= totalDias; dia++) {
+        const d = new Date(calAno, calMes, dia);
+        const dateStr = toLocalDateString(d);
+        const diaSemana = d.getDay();
+
+        if (!config.diasAtendimento.includes(diaSemana) || datasBloqueadas.has(dateStr) || totalSubSlots === 0) {
+          status[dateStr] = 'indisponivel';
+          continue;
+        }
+        const ocupados = ocupacoesPorDia[dateStr]?.length ?? 0;
+        status[dateStr] = ocupados >= totalSubSlots ? 'lotado' : 'livre';
+      }
+      setDiasStatus(status);
+    } catch (error) {
+      console.error('Erro ao carregar calendário:', error);
+    } finally {
+      setCalendarioLoading(false);
+    }
+  };
+
+  const handleChangeMonth = (delta: number) => {
+    let novoMes = calMes + delta;
+    let novoAno = calAno;
+    if (novoMes < 0) { novoMes = 11; novoAno -= 1; }
+    if (novoMes > 11) { novoMes = 0; novoAno += 1; }
+    setCalMes(novoMes);
+    setCalAno(novoAno);
+  };
+
+  const handleSelectDate = (date: string) => {
+    setDataFiltro((prev) => (prev === date ? null : date));
+  };
 
   const checkOnboarding = async () => {
     try {
@@ -289,6 +367,10 @@ export default function BarbeiroHome({ navigation }: Props) {
     ? userProfile.nome.split(' ')[0]
     : 'Barbeiro';
 
+  const agendamentosExibidos = dataFiltro
+    ? agendamentos.filter((ag) => ag.data === dataFiltro)
+    : agendamentos;
+
   return (
     <SafeAreaView style={s.container} edges={['top']}>
       {/* Header simples — sem botões de navegação (movidos para tabs) */}
@@ -297,6 +379,14 @@ export default function BarbeiroHome({ navigation }: Props) {
           <Text style={s.greeting}>Olá, {barbeiroNome}!</Text>
           <Text style={s.title}>Agenda</Text>
         </View>
+        <TouchableOpacity
+          style={s.novoAgendamentoButton}
+          onPress={() => navigation.navigate('AgendamentoManual')}
+          accessibilityRole="button"
+          accessibilityLabel="Novo agendamento manual"
+        >
+          <Text style={s.novoAgendamentoButtonText}>＋ Agendar</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Stats */}
@@ -315,8 +405,38 @@ export default function BarbeiroHome({ navigation }: Props) {
         </View>
       </View>
 
+      <TouchableOpacity
+        style={s.toggleCalendario}
+        onPress={() => setShowCalendario((v) => !v)}
+        accessibilityRole="button"
+      >
+        <Text style={s.toggleCalendarioText}>
+          {showCalendario ? '📅 Ocultar calendário' : '📅 Ver calendário'}
+        </Text>
+      </TouchableOpacity>
+
+      {showCalendario && (
+        <CalendarioMensal
+          mes={calMes}
+          ano={calAno}
+          diasStatus={diasStatus}
+          selectedDate={dataFiltro}
+          onSelectDate={handleSelectDate}
+          onChangeMonth={handleChangeMonth}
+          loading={calendarioLoading}
+        />
+      )}
+
+      {dataFiltro && (
+        <TouchableOpacity style={s.filtroChip} onPress={() => setDataFiltro(null)}>
+          <Text style={s.filtroChipText}>
+            Mostrando {dataFiltro} · toque para limpar filtro ✕
+          </Text>
+        </TouchableOpacity>
+      )}
+
       <FlatList
-        data={agendamentos}
+        data={agendamentosExibidos}
         keyExtractor={(item) => item.id}
         renderItem={renderAgendamento}
         refreshControl={
@@ -329,14 +449,17 @@ export default function BarbeiroHome({ navigation }: Props) {
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyIcon}>📋</Text>
-            <Text style={s.emptyTitle}>Nenhum agendamento</Text>
+            <Text style={s.emptyTitle}>
+              {dataFiltro ? 'Nenhum agendamento nesse dia' : 'Nenhum agendamento'}
+            </Text>
             <Text style={s.emptyDesc}>
-              Os agendamentos dos clientes aparecerão aqui.{'\n'}
-              Configure seus serviços na aba Configurações.
+              {dataFiltro
+                ? 'Toque no chip acima para ver todos os agendamentos.'
+                : 'Os agendamentos dos clientes aparecerão aqui.\nConfigure seus serviços na aba Configurações.'}
             </Text>
           </View>
         }
-        contentContainerStyle={agendamentos.length === 0 && s.emptyContainer}
+        contentContainerStyle={agendamentosExibidos.length === 0 && s.emptyContainer}
       />
     </SafeAreaView>
   );
@@ -357,6 +480,43 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   greeting: { fontSize: 13, color: theme.colors.textSecondary },
   title: { fontSize: 22, fontWeight: '800', color: theme.colors.text },
+  novoAgendamentoButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  novoAgendamentoButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  toggleCalendario: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  toggleCalendarioText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.primary,
+  },
+  filtroChip: {
+    backgroundColor: theme.colors.primary + '20',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  filtroChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.primary,
+  },
   stats: {
     flexDirection: 'row',
     paddingHorizontal: 16,
