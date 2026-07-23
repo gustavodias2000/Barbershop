@@ -52,33 +52,64 @@ function minutesToTime(minutes: number): string {
 }
 
 /**
- * Gera os slots disponíveis com base na configuração do barbeiro e duração do serviço.
- * Pula horários que conflitem com o intervalo de almoço. Após cada slot, reserva o
- * intervalo de descanso/limpeza configurado (buffer) antes de liberar o próximo horário.
+ * Gera os slots de um bloco de horário simples (início/fim), respeitando a
+ * duração do serviço, o buffer pós-atendimento e um intervalo de pausa
+ * opcional (usado para o almoço no bloco principal).
  */
-function gerarSlots(config: ConfiguracaoAgenda, duracaoMinutos: number): string[] {
+function gerarSlotsBloco(
+  inicio: string,
+  fim: string,
+  duracaoMinutos: number,
+  buffer: number,
+  pausaInicio: number | null = null,
+  pausaFim: number | null = null,
+): string[] {
   const slots: string[] = [];
-  let current = timeToMinutes(config.horaInicio);
-  const end = timeToMinutes(config.horaFim);
-  const buffer = config.intervaloAposAtendimentoMinutos || 0;
-
-  const almocoInicio =
-    config.almocoInicio ? timeToMinutes(config.almocoInicio) : null;
-  const almocoFim =
-    config.almocoFim ? timeToMinutes(config.almocoFim) : null;
+  let current = timeToMinutes(inicio);
+  const end = timeToMinutes(fim);
 
   while (current + duracaoMinutos <= end) {
-    // Pula se o slot (ou qualquer parte dele) cai dentro do almoço
-    if (almocoInicio !== null && almocoFim !== null) {
+    // Pula se o slot (ou qualquer parte dele) cai dentro da pausa
+    if (pausaInicio !== null && pausaFim !== null) {
       const slotFim = current + duracaoMinutos;
-      if (current < almocoFim && slotFim > almocoInicio) {
-        current = almocoFim; // avança para depois do almoço
+      if (current < pausaFim && slotFim > pausaInicio) {
+        current = pausaFim; // avança para depois da pausa
         continue;
       }
     }
     slots.push(minutesToTime(current));
     current += duracaoMinutos + buffer;
   }
+  return slots;
+}
+
+/**
+ * Gera os slots disponíveis com base na configuração do barbeiro e duração do
+ * serviço: bloco principal (respeitando o intervalo de almoço) e, se
+ * configurado, um segundo bloco — "turno extra" (ex.: período noturno).
+ * Após cada slot, reserva o intervalo de descanso/limpeza (buffer) configurado.
+ */
+function gerarSlots(config: ConfiguracaoAgenda, duracaoMinutos: number): string[] {
+  const buffer = config.intervaloAposAtendimentoMinutos || 0;
+
+  const almocoInicio = config.almocoInicio ? timeToMinutes(config.almocoInicio) : null;
+  const almocoFim = config.almocoFim ? timeToMinutes(config.almocoFim) : null;
+
+  const slots = gerarSlotsBloco(
+    config.horaInicio,
+    config.horaFim,
+    duracaoMinutos,
+    buffer,
+    almocoInicio,
+    almocoFim,
+  );
+
+  if (config.turnoExtraAtivo && config.turnoExtraInicio && config.turnoExtraFim) {
+    slots.push(
+      ...gerarSlotsBloco(config.turnoExtraInicio, config.turnoExtraFim, duracaoMinutos, buffer),
+    );
+  }
+
   return slots;
 }
 

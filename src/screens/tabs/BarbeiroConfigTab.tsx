@@ -39,6 +39,13 @@ const ITENS = [
     destaque: true,
   },
   {
+    icon: '👥',
+    label: 'Clientes',
+    desc: 'Importe contatos ou cadastre clientes manualmente',
+    route: 'Clientes' as keyof RootStackParamList,
+    destaque: false,
+  },
+  {
     icon: '💬',
     label: 'Templates WhatsApp',
     desc: 'Personalize mensagens de agendamento',

@@ -19,6 +19,8 @@ import PrivacidadeScreen from './src/screens/PrivacidadeScreen';
 import ConfigAgendaScreen from './src/screens/ConfigAgendaScreen';
 import FolgasScreen from './src/screens/FolgasScreen';
 import ConfigServicosScreen from './src/screens/ConfigServicosScreen';
+import SetupBarbeiroScreen from './src/screens/SetupBarbeiroScreen';
+import ClientesScreen from './src/screens/ClientesScreen';
 import TemplatesMensagemScreen from './src/screens/TemplatesMensagemScreen';
 import ClientesBanidosScreen from './src/screens/ClientesBanidosScreen';
 import HistoricoClienteScreen from './src/screens/HistoricoClienteScreen';
@@ -118,6 +120,16 @@ export default function App() {
             name="ConfigServicos"
             component={ConfigServicosScreen}
             options={{ title: 'Meus Serviços' }}
+          />
+          <Stack.Screen
+            name="SetupBarbeiro"
+            component={SetupBarbeiroScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Clientes"
+            component={ClientesScreen}
+            options={{ title: 'Clientes' }}
           />
           <Stack.Screen
             name="TemplatesMensagem"

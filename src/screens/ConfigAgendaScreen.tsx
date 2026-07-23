@@ -81,6 +81,9 @@ const DEFAULT_CONFIG: ConfiguracaoAgenda = {
   antecedenciaMaximaDias: 30,
   diasAtendimento: [1, 2, 3, 4, 5, 6],
   intervaloAposAtendimentoMinutos: 0,
+  turnoExtraAtivo: false,
+  turnoExtraInicio: '19:00',
+  turnoExtraFim: '21:00',
 };
 
 export default function ConfigAgendaScreen({ navigation }: Props) {
@@ -140,6 +143,23 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
     if (almoco && configToSave.almocoInicio >= configToSave.almocoFim) {
       Alert.alert('Atenção', 'O início do almoço deve ser anterior ao fim.');
       return;
+    }
+    if (configToSave.turnoExtraAtivo) {
+      if (!configToSave.turnoExtraInicio || !configToSave.turnoExtraFim) {
+        Alert.alert('Atenção', 'Defina o início e o fim do turno extra.');
+        return;
+      }
+      if (configToSave.turnoExtraInicio >= configToSave.turnoExtraFim) {
+        Alert.alert('Atenção', 'O início do turno extra deve ser anterior ao fim.');
+        return;
+      }
+      if (configToSave.turnoExtraInicio < configToSave.horaFim) {
+        Alert.alert(
+          'Atenção',
+          'O turno extra deve começar depois do horário principal, para não se sobrepor.',
+        );
+        return;
+      }
     }
     if (configToSave.diasAtendimento.length === 0) {
       Alert.alert('Atenção', 'Selecione ao menos um dia de atendimento.');
@@ -350,6 +370,41 @@ export default function ConfigAgendaScreen({ navigation }: Props) {
               </TouchableOpacity>
             ))}
           </ScrollView>
+        </View>
+
+        {/* Turno extra (ex: período noturno) */}
+        <View style={s.card}>
+          <View style={s.rowBetween}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.cardTitle}>Turno Extra</Text>
+              <Text style={s.hint}>
+                Ative se você também atende num segundo período no mesmo dia
+                (ex.: período noturno), além do horário principal acima.
+              </Text>
+            </View>
+            <Switch
+              value={!!config.turnoExtraAtivo}
+              onValueChange={(v) => setConfig((p) => ({ ...p, turnoExtraAtivo: v }))}
+              trackColor={{ true: theme.colors.primary }}
+              thumbColor="#fff"
+            />
+          </View>
+          {config.turnoExtraAtivo && (
+            <>
+              {renderPickerRow(
+                'Início do turno extra',
+                horasOptions,
+                config.turnoExtraInicio || '19:00',
+                (v: string) => setConfig((p) => ({ ...p, turnoExtraInicio: v })),
+              )}
+              {renderPickerRow(
+                'Fim do turno extra',
+                horasOptions.filter((h) => h.value > (config.turnoExtraInicio || '19:00')),
+                config.turnoExtraFim || '21:00',
+                (v: string) => setConfig((p) => ({ ...p, turnoExtraFim: v })),
+              )}
+            </>
+          )}
         </View>
 
         {/* Dias de folga */}

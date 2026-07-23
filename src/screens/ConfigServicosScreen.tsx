@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import { upsertBarbeiro, getBarbeiro } from '../data/repositories/BarbeiroRepository';
 import { formatMoney, precoParaCentavos } from '../utils/dateUtils';
+import { getServicosPreSelecionados } from '../utils/servicosPadrao';
 import { useTheme, type Theme } from '../context/ThemeContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, ServicoBarbeiro } from '../types';
@@ -36,12 +37,6 @@ const DURACOES = [
   { label: '1h 15', value: 75 },
   { label: '1h 30', value: 90 },
   { label: '2 horas', value: 120 },
-];
-
-const SERVICOS_PADRAO: ServicoBarbeiro[] = [
-  { id: 'corte', nome: 'Corte', duracaoMinutos: 30, precoEmCentavos: 3000 },
-  { id: 'barba', nome: 'Barba', duracaoMinutos: 30, precoEmCentavos: 2000 },
-  { id: 'corte_barba', nome: 'Corte & Barba', duracaoMinutos: 60, precoEmCentavos: 4500 },
 ];
 
 function generateId(): string {
@@ -75,7 +70,7 @@ export default function ConfigServicosScreen({ navigation }: Props) {
       if (barbeiro?.servicos && barbeiro.servicos.length > 0) {
         setServicos(barbeiro.servicos);
       } else {
-        setServicos(SERVICOS_PADRAO);
+        setServicos(getServicosPreSelecionados());
       }
     } catch (error) {
       console.error('Erro ao carregar serviços:', error);

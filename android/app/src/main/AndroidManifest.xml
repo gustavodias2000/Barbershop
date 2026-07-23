@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Usada apenas quando o barbeiro escolhe "Importar contatos" na tela de Clientes -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!--
       Android 11+ exige que o app declare explicitamente quais outros apps

@@ -121,8 +121,13 @@ export default function OnboardingScreen({ route, navigation }: Props) {
     } catch (_) {
       // ignora falha no storage — o onboarding pode reaparecer na próxima sessão
     }
-    // Substitui o onboarding pelo home para não voltar com o back
-    navigation.replace(destino as any);
+    // Barbeiro vai para o wizard de configuração inicial (serviços + horário)
+    // antes de cair na home vazia. Substitui a tela para não voltar com o back.
+    if (tipo === 'barbeiro') {
+      navigation.replace('SetupBarbeiro');
+    } else {
+      navigation.replace(destino as any);
+    }
   }, [tipo, destino, navigation]);
 
   const irParaSlide = (index: number) => {

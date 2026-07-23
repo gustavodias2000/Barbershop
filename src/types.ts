@@ -31,6 +31,14 @@ export interface ConfiguracaoAgenda {
   diasAtendimento: number[];    // 0=dom, 1=seg, ..., 6=sab; ex.: [1,2,3,4,5,6]
   /** Intervalo de descanso/limpeza após cada atendimento (minutos). 0 = sem buffer. */
   intervaloAposAtendimentoMinutos?: number;
+  /**
+   * Turno extra opcional (ex.: período noturno), além do horário principal
+   * (horaInicio–horaFim). Gera slots adicionais nesse segundo bloco, sem
+   * intervalo de almoço aplicado a ele.
+   */
+  turnoExtraAtivo?: boolean;
+  turnoExtraInicio?: string;    // "19:00"
+  turnoExtraFim?: string;       // "21:00"
 }
 
 // ─── Templates de mensagem WhatsApp ──────────────────────────────────────────
@@ -57,6 +65,21 @@ export type Horario = string;
 
 /** Campo de data vindo do Firestore: Timestamp ao ler, FieldValue ao gravar */
 export type FirestoreDate = Timestamp | FieldValue;
+
+// ─── Agenda de clientes do barbeiro (cadastro manual/importado) ──────────────
+
+/**
+ * Contato de cliente cadastrado pelo barbeiro (manualmente ou importado da
+ * agenda do telefone). Independente de `Usuario` — não exige que o cliente
+ * tenha conta no app. Serve como base para futuro agendamento manual.
+ */
+export interface ClienteContato {
+  id: string;
+  nome: string;
+  telefone?: string;
+  origem: 'manual' | 'contatos';
+  createdAt?: FirestoreDate;
+}
 
 // ─── Clientes banidos ─────────────────────────────────────────────────────────
 
@@ -210,6 +233,8 @@ export type RootStackParamList = {
   ConfigAgenda: undefined;
   Folgas: undefined;
   ConfigServicos: undefined;
+  SetupBarbeiro: undefined;
+  Clientes: undefined;
   TemplatesMensagem: undefined;
   ClientesBanidos: undefined;
   HistoricoCliente: { clienteUid: string; clienteNome: string; barbeiroId: string };
