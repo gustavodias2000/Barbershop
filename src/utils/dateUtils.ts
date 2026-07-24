@@ -45,7 +45,7 @@ export const formatPreco = (doc?: ComPreco | null): string => {
 
 // ─── Datas ────────────────────────────────────────────────────────────────────
 
-const toDateObj = (date: DateLike): Date | null => {
+export const toDateObj = (date: DateLike): Date | null => {
   if (!date) return null;
   try {
     const dateObj =

@@ -17,6 +17,7 @@ import {
   updateDoc,
   limit,
   serverTimestamp,
+  getCountFromServer,
   type QueryConstraint,
 } from 'firebase/firestore';
 import type { Agendamento, NovoAgendamento, StatusAgendamento } from '../../types';
@@ -108,6 +109,45 @@ export async function listarConcluidosPorNegocio(
     ),
   );
   return snap.docs.map(fromSnap);
+}
+
+/**
+ * Lista os agendamentos do barbeiro num intervalo de datas (inclusive) —
+ * usado pelo resumo "Esta semana" da tela Início. Precisa do índice
+ * composto `barbeiroId` + `data` (ver firestore.indexes.json).
+ */
+export async function listarPorBarbeiroEPeriodo(
+  barbeiroId: string,
+  dataInicio: string,
+  dataFim: string,
+): Promise<Agendamento[]> {
+  if (!barbeiroId) return [];
+  const snap = await getDocs(
+    query(
+      collection(db, 'agendamentos'),
+      where('barbeiroId', '==', barbeiroId),
+      where('data', '>=', dataInicio),
+      where('data', '<=', dataFim),
+    ),
+  );
+  return snap.docs.map(fromSnap);
+}
+
+/**
+ * Conta os agendamentos pendentes de confirmação do barbeiro — contagem
+ * agregada no servidor (mesmo padrão do `AnalyticsDashboard`), sem baixar
+ * os documentos. Usa o índice composto já existente `barbeiroId + status`.
+ */
+export async function contarPendentesDoBarbeiro(barbeiroId?: string | null): Promise<number> {
+  if (!barbeiroId) return 0;
+  const snap = await getCountFromServer(
+    query(
+      collection(db, 'agendamentos'),
+      where('barbeiroId', '==', barbeiroId),
+      where('status', '==', 'pendente'),
+    ),
+  );
+  return snap.data().count;
 }
 
 /**

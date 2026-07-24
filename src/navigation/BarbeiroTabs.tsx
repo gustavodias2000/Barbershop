@@ -2,22 +2,25 @@
  * BarbeiroTabs — Bottom Tab Navigator para o fluxo do barbeiro.
  *
  * Abas:
- *  1. Agenda      — lista de agendamentos do dia / todos
- *  2. Config      — configurações administrativas
- *  3. Analytics   — dashboard de métricas
- *  4. Perfil      — perfil do barbeiro + sair
+ *  1. Inicio      — painel-resumo (tela de entrada; antes era a Agenda)
+ *  2. Agenda      — lista de agendamentos do dia / todos
+ *  3. Config      — configurações administrativas
+ *  4. Analytics   — dashboard de métricas
+ *  5. Perfil      — perfil do barbeiro + sair
  */
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, Platform } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
+import InicioScreen from '../screens/InicioScreen';
 import BarbeiroHome from '../screens/BarbeiroHome';
 import BarbeiroConfigTab from '../screens/tabs/BarbeiroConfigTab';
 import BarbeiroAnalyticsTab from '../screens/tabs/BarbeiroAnalyticsTab';
 import BarbeiroPerfilTab from '../screens/tabs/BarbeiroPerfilTab';
 
 type BarbeiroTabParamList = {
+  Inicio: undefined;
   Agenda: undefined;
   Config: undefined;
   Analytics: undefined;
@@ -27,6 +30,7 @@ type BarbeiroTabParamList = {
 const Tab = createBottomTabNavigator<BarbeiroTabParamList>();
 
 const ICONS: Record<string, string> = {
+  Inicio:    '🏠',
   Agenda:    '📋',
   Config:    '⚙️',
   Analytics: '📊',
@@ -62,6 +66,11 @@ export default function BarbeiroTabs() {
         },
       })}
     >
+      <Tab.Screen
+        name="Inicio"
+        component={InicioScreen}
+        options={{ title: 'Início' }}
+      />
       <Tab.Screen
         name="Agenda"
         component={BarbeiroHome}

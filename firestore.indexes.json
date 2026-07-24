@@ -43,6 +43,14 @@
       ]
     },
     {
+      "collectionGroup": "agendamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "barbeiroId", "order": "ASCENDING" },
+        { "fieldPath": "data", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "ocupacoes",
       "queryScope": "COLLECTION",
       "fields": [

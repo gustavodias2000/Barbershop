@@ -31,8 +31,6 @@ import { useToast } from '../context/ToastContext';
 import { getStatusColor, getStatusText } from '../utils/statusUtils';
 import { SkeletonList } from '../components/Skeleton';
 import CalendarioMensal, { type StatusDia } from '../components/CalendarioMensal';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ONBOARDING_KEY } from './OnboardingScreen';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -78,7 +76,6 @@ export default function BarbeiroHome({ navigation }: Props) {
   const [dataFiltro, setDataFiltro] = useState<string | null>(null);
 
   useEffect(() => {
-    checkOnboarding();
     fetchAgendamentos().finally(() => setLoading(false));
   }, []);
 
@@ -136,15 +133,6 @@ export default function BarbeiroHome({ navigation }: Props) {
 
   const handleSelectDate = (date: string) => {
     setDataFiltro((prev) => (prev === date ? null : date));
-  };
-
-  const checkOnboarding = async () => {
-    try {
-      const visto = await AsyncStorage.getItem(ONBOARDING_KEY.barbeiro);
-      if (!visto) {
-        navigation.navigate('Onboarding', { tipo: 'barbeiro' });
-      }
-    } catch (_) {}
   };
 
   const fetchAgendamentos = async () => {

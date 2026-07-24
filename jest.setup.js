@@ -73,6 +73,13 @@ jest.mock('firebase/firestore', () => ({
   // writeBatch: usado por ClienteContatoRepository.importarClientesEmLote
   // (importação de contatos em lotes de 400 — ver teste de regressão).
   writeBatch: jest.fn(),
+  // Agregação server-side (AnalyticsDashboard, InicioScreen/AgendamentoRepository) —
+  // conta/soma/média calculadas no Firestore, sem baixar os documentos.
+  getCountFromServer: jest.fn(),
+  getAggregateFromServer: jest.fn(),
+  count: jest.fn(),
+  sum: jest.fn(),
+  average: jest.fn(),
   serverTimestamp: jest.fn(() => ({ __serverTimestamp: true })),
 }));
 
